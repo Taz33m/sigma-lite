@@ -21,6 +21,13 @@ const queryClient = new QueryClient({
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const authDisabled = import.meta.env.VITE_DISABLE_AUTH === 'true';
+  
+  // If auth is disabled, allow access
+  if (authDisabled) {
+    return <>{children}</>;
+  }
+  
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" />;
 }
 

@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
     
+    # Authentication
+    DISABLE_AUTH: bool = False  # Set to True to disable authentication
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

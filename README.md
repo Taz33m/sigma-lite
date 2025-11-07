@@ -57,8 +57,14 @@ SigmaLite bridges the simplicity of spreadsheets with the power of modern data s
 ### Prerequisites
 - Node.js 18+ and npm
 - Python 3.11+
-- PostgreSQL 14+
+- SQLite (included with Python - no installation needed!)
 - Redis (optional, for caching)
+
+### 🎯 Skip Authentication (Recommended for Testing)
+
+For quick testing, authentication is **disabled by default**. Just start the servers and go directly to the dashboard!
+
+See [docs/DISABLE_AUTH.md](docs/DISABLE_AUTH.md) for details.
 
 ### Installation
 

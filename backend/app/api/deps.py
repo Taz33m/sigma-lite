@@ -6,17 +6,45 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import decode_token
+from app.core.config import settings
 from app.models.user import User
 from app.schemas.user import TokenPayload
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"/api/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"/api/auth/login", auto_error=False)
 
 
 def get_current_user(
     db: Session = Depends(get_db),
-    token: str = Depends(oauth2_scheme)
+    token: Optional[str] = Depends(oauth2_scheme)
 ) -> User:
     """Get current authenticated user."""
+    # If authentication is disabled, return a mock user
+    if settings.DISABLE_AUTH:
+        # Check if demo user exists, create if not
+        demo_user = db.query(User).filter(User.username == "demo_user").first()
+        if not demo_user:
+            from app.core.security import get_password_hash
+            demo_user = User(
+                email="demo@sigmalite.com",
+                username="demo_user",
+                full_name="Demo User",
+                hashed_password=get_password_hash("demo"),
+                is_active=True,
+                is_superuser=False
+            )
+            db.add(demo_user)
+            db.commit()
+            db.refresh(demo_user)
+        return demo_user
+    
+    # Normal authentication flow
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
