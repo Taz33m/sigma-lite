@@ -181,9 +181,8 @@ Once the backend is running, visit:
 ### Frontend
 - **React 18** with TypeScript
 - **Vite** for fast builds
-- **Tailwind CSS** for styling
-- **shadcn/ui** for component library
-- **AG Grid** for spreadsheet functionality
+- **Material-UI (MUI)** for UI components and styling
+- **MUI X Data Grid** for spreadsheet functionality
 - **Chart.js** for visualizations
 - **Zustand** for state management
 - **React Query** for data fetching
