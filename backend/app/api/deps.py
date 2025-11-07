@@ -23,12 +23,12 @@ def get_current_user(
         # Check if demo user exists, create if not
         demo_user = db.query(User).filter(User.username == "demo_user").first()
         if not demo_user:
-            from app.core.security import get_password_hash
+            # Use a dummy hash since auth is disabled anyway
             demo_user = User(
                 email="demo@sigmalite.com",
                 username="demo_user",
                 full_name="Demo User",
-                hashed_password=get_password_hash("demo"),
+                hashed_password="$2b$12$dummy_hash_not_used_when_auth_disabled",
                 is_active=True,
                 is_superuser=False
             )
