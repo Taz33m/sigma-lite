@@ -2,28 +2,31 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
+import {
+  Container,
+  Box,
+  Paper,
+  Typography,
+  TextField,
+  Button,
+  Link as MuiLink,
+} from '@mui/material';
+import { Login as LoginIcon, Storage } from '@mui/icons-material';
 import { authAPI } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
-import { Database } from 'lucide-react';
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const setUser = useAuthStore((state) => state.setUser);
+  const setAuth = useAuthStore((state) => state.setAuth);
   const [formData, setFormData] = useState({
     username: '',
     password: '',
   });
 
   const loginMutation = useMutation({
-    mutationFn: authAPI.login,
+    mutationFn: (data: { username: string; password: string }) => authAPI.login(data),
     onSuccess: (data) => {
-      localStorage.setItem('access_token', data.access_token);
-      localStorage.setItem('refresh_token', data.refresh_token);
-      
-      // Decode token to get user info (simplified - in production, fetch user profile)
-      const payload = JSON.parse(atob(data.access_token.split('.')[1]));
-      setUser({ id: payload.sub } as any);
-      
+      setAuth(data.user);
       toast.success('Login successful!');
       navigate('/');
     },
@@ -38,64 +41,73 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-50 to-primary-100">
-      <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
-        <div className="flex items-center justify-center mb-8">
-          <Database className="w-12 h-12 text-primary-600 mr-3" />
-          <h1 className="text-3xl font-bold text-gray-900">SigmaLite</h1>
-        </div>
-        
-        <h2 className="text-2xl font-semibold text-center mb-6 text-gray-800">
-          Welcome Back
-        </h2>
+    <Container component="main" maxWidth="xs">
+      <Box
+        sx={{
+          marginTop: 8,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+        }}
+      >
+        <Paper elevation={3} sx={{ p: 4, width: '100%' }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 3 }}>
+            <Storage sx={{ fontSize: 48, color: 'primary.main', mb: 1 }} />
+            <Typography component="h1" variant="h4" fontWeight="bold">
+              SigmaLite
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Data Exploration Platform
+            </Typography>
+          </Box>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
-              Username
-            </label>
-            <input
-              id="username"
-              type="text"
+          <Typography component="h2" variant="h5" sx={{ mb: 3 }}>
+            Sign in
+          </Typography>
+
+          <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1 }}>
+            <TextField
+              margin="normal"
               required
+              fullWidth
+              id="username"
+              label="Username"
+              name="username"
+              autoComplete="username"
+              autoFocus
               value={formData.username}
               onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition"
-              placeholder="Enter your username"
             />
-          </div>
-
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
+            <TextField
+              margin="normal"
               required
+              fullWidth
+              name="password"
+              label="Password"
+              type="password"
+              id="password"
+              autoComplete="current-password"
               value={formData.password}
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition"
-              placeholder="Enter your password"
             />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loginMutation.isPending}
-            className="w-full bg-primary-600 text-white py-2 px-4 rounded-lg hover:bg-primary-700 focus:ring-4 focus:ring-primary-300 transition disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-          >
-            {loginMutation.isPending ? 'Logging in...' : 'Log In'}
-          </button>
-        </form>
-
-        <p className="mt-6 text-center text-sm text-gray-600">
-          Don't have an account?{' '}
-          <Link to="/register" className="text-primary-600 hover:text-primary-700 font-medium">
-            Sign up
-          </Link>
-        </p>
-      </div>
-    </div>
+            <Button
+              type="submit"
+              fullWidth
+              variant="contained"
+              sx={{ mt: 3, mb: 2 }}
+              disabled={loginMutation.isPending}
+              startIcon={<LoginIcon />}
+            >
+              {loginMutation.isPending ? 'Signing in...' : 'Sign In'}
+            </Button>
+            <Box sx={{ textAlign: 'center' }}>
+              <MuiLink component={Link} to="/register" variant="body2">
+                Don't have an account? Sign Up
+              </MuiLink>
+            </Box>
+          </Box>
+        </Paper>
+      </Box>
+    </Container>
   );
 }

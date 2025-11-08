@@ -1,31 +1,37 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import {
+  AppBar,
+  Toolbar,
+  Typography,
+  Container,
+  Box,
+  Paper,
+  IconButton,
+} from '@mui/material';
+import { ArrowBack } from '@mui/icons-material';
 
 export default function SheetPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center">
-            <button
-              onClick={() => navigate('/')}
-              className="mr-4 p-2 hover:bg-gray-100 rounded-lg transition"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <h1 className="text-2xl font-bold text-gray-900">Sheet {id}</h1>
-          </div>
-        </div>
-      </header>
+    <Box>
+      <AppBar position="static">
+        <Toolbar>
+          <IconButton edge="start" color="inherit" onClick={() => navigate('/')} sx={{ mr: 2 }}>
+            <ArrowBack />
+          </IconButton>
+          <Typography variant="h6">Sheet {id}</Typography>
+        </Toolbar>
+      </AppBar>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-white rounded-lg shadow p-6">
-          <p className="text-gray-600">Sheet collaboration view - Coming soon!</p>
-        </div>
-      </main>
-    </div>
+      <Container maxWidth="lg" sx={{ mt: 4 }}>
+        <Paper sx={{ p: 4, textAlign: 'center' }}>
+          <Typography variant="h5" color="text.secondary">
+            Sheet collaboration view - Coming soon!
+          </Typography>
+        </Paper>
+      </Container>
+    </Box>
   );
 }

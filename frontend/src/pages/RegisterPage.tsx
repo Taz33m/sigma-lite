@@ -2,8 +2,17 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
+import {
+  Container,
+  Box,
+  Paper,
+  Typography,
+  TextField,
+  Button,
+  Link as MuiLink,
+} from '@mui/material';
+import { PersonAdd, Storage } from '@mui/icons-material';
 import { authAPI } from '@/lib/api';
-import { Database } from 'lucide-react';
 
 export default function RegisterPage() {
   const navigate = useNavigate();
@@ -17,7 +26,7 @@ export default function RegisterPage() {
   const registerMutation = useMutation({
     mutationFn: authAPI.register,
     onSuccess: () => {
-      toast.success('Registration successful! Please log in.');
+      toast.success('Registration successful! Please login.');
       navigate('/login');
     },
     onError: (error: any) => {
@@ -31,94 +40,74 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-50 to-primary-100">
-      <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
-        <div className="flex items-center justify-center mb-8">
-          <Database className="w-12 h-12 text-primary-600 mr-3" />
-          <h1 className="text-3xl font-bold text-gray-900">SigmaLite</h1>
-        </div>
-        
-        <h2 className="text-2xl font-semibold text-center mb-6 text-gray-800">
-          Create Account
-        </h2>
+    <Container component="main" maxWidth="xs">
+      <Box sx={{ marginTop: 8, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <Paper elevation={3} sx={{ p: 4, width: '100%' }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 3 }}>
+            <Storage sx={{ fontSize: 48, color: 'primary.main', mb: 1 }} />
+            <Typography component="h1" variant="h4" fontWeight="bold">
+              SigmaLite
+            </Typography>
+          </Box>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
+          <Typography component="h2" variant="h5" sx={{ mb: 3 }}>
+            Sign up
+          </Typography>
+
+          <Box component="form" onSubmit={handleSubmit}>
+            <TextField
+              margin="normal"
               required
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition"
-              placeholder="you@example.com"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
-              Username
-            </label>
-            <input
-              id="username"
-              type="text"
-              required
-              value={formData.username}
-              onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition"
-              placeholder="Choose a username"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="full_name" className="block text-sm font-medium text-gray-700 mb-1">
-              Full Name (Optional)
-            </label>
-            <input
-              id="full_name"
-              type="text"
+              fullWidth
+              label="Full Name"
+              autoFocus
               value={formData.full_name}
               onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition"
-              placeholder="Your full name"
             />
-          </div>
-
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
+            <TextField
+              margin="normal"
               required
-              minLength={8}
+              fullWidth
+              label="Email Address"
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+            />
+            <TextField
+              margin="normal"
+              required
+              fullWidth
+              label="Username"
+              value={formData.username}
+              onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+            />
+            <TextField
+              margin="normal"
+              required
+              fullWidth
+              label="Password"
+              type="password"
               value={formData.password}
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition"
-              placeholder="At least 8 characters"
             />
-          </div>
-
-          <button
-            type="submit"
-            disabled={registerMutation.isPending}
-            className="w-full bg-primary-600 text-white py-2 px-4 rounded-lg hover:bg-primary-700 focus:ring-4 focus:ring-primary-300 transition disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-          >
-            {registerMutation.isPending ? 'Creating account...' : 'Sign Up'}
-          </button>
-        </form>
-
-        <p className="mt-6 text-center text-sm text-gray-600">
-          Already have an account?{' '}
-          <Link to="/login" className="text-primary-600 hover:text-primary-700 font-medium">
-            Log in
-          </Link>
-        </p>
-      </div>
-    </div>
+            <Button
+              type="submit"
+              fullWidth
+              variant="contained"
+              sx={{ mt: 3, mb: 2 }}
+              disabled={registerMutation.isPending}
+              startIcon={<PersonAdd />}
+            >
+              {registerMutation.isPending ? 'Creating account...' : 'Sign Up'}
+            </Button>
+            <Box sx={{ textAlign: 'center' }}>
+              <MuiLink component={Link} to="/login" variant="body2">
+                Already have an account? Sign in
+              </MuiLink>
+            </Box>
+          </Box>
+        </Paper>
+      </Box>
+    </Container>
   );
 }

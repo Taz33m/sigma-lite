@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
+import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
 import { useAuthStore } from '@/store/authStore';
 
 // Pages
@@ -19,6 +20,17 @@ const queryClient = new QueryClient({
   },
 });
 
+const theme = createTheme({
+  palette: {
+    primary: {
+      main: '#1976d2',
+    },
+    secondary: {
+      main: '#dc004e',
+    },
+  },
+});
+
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const authDisabled = import.meta.env.VITE_DISABLE_AUTH === 'true';
@@ -33,41 +45,42 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <Router>
-        <div className="min-h-screen bg-gray-50">
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <QueryClientProvider client={queryClient}>
+        <Router>
           <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/register" element={<RegisterPage />} />
-            <Route
-              path="/"
-              element={
-                <PrivateRoute>
-                  <DashboardPage />
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/dataset/:id"
-              element={
-                <PrivateRoute>
-                  <DatasetPage />
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/sheet/:id"
-              element={
-                <PrivateRoute>
-                  <SheetPage />
-                </PrivateRoute>
-              }
-            />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
+              <Route
+                path="/"
+                element={
+                  <PrivateRoute>
+                    <DashboardPage />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/dataset/:id"
+                element={
+                  <PrivateRoute>
+                    <DatasetPage />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/sheet/:id"
+                element={
+                  <PrivateRoute>
+                    <SheetPage />
+                  </PrivateRoute>
+                }
+              />
           </Routes>
-        </div>
-        <Toaster position="top-right" />
-      </Router>
-    </QueryClientProvider>
+          <Toaster position="top-right" />
+        </Router>
+      </QueryClientProvider>
+    </ThemeProvider>
   );
 }
 
