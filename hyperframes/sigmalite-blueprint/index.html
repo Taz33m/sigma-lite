@@ -179,6 +179,72 @@
         text-transform: uppercase;
       }
 
+      .explain-callout {
+        position: relative;
+        align-self: start;
+        padding: 20px 24px 22px;
+        border: 1px solid rgba(103, 213, 255, 0.72);
+        background: rgba(7, 25, 35, 0.74);
+        color: #f4f7fb;
+        box-shadow:
+          0 20px 60px rgba(0, 0, 0, 0.2),
+          inset 0 0 0 1px rgba(244, 247, 251, 0.06);
+      }
+
+      .explain-callout.paper-callout {
+        background: rgba(244, 247, 251, 0.96);
+        color: #071923;
+        border-color: rgba(30, 136, 229, 0.7);
+      }
+
+      .explain-callout .callout-title {
+        color: #67d5ff;
+        font-size: 16px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      .explain-callout.paper-callout .callout-title {
+        color: #0d47a1;
+      }
+
+      .explain-callout p {
+        margin: 12px 0 0;
+        font-size: 25px;
+        line-height: 1.18;
+      }
+
+      .explain-callout code {
+        display: inline-block;
+        margin-top: 12px;
+        color: #f6c945;
+        font-family: "IBM Plex Mono", "Courier New", monospace;
+        font-size: 20px;
+      }
+
+      .explain-callout.paper-callout code {
+        color: #0d47a1;
+      }
+
+      .callout-leader {
+        position: absolute;
+        height: 2px;
+        width: 120px;
+        background: #67d5ff;
+        transform-origin: left center;
+        box-shadow: 0 0 16px rgba(103, 213, 255, 0.52);
+      }
+
+      .callout-leader.red {
+        background: #e23d3d;
+        box-shadow: 0 0 16px rgba(226, 61, 61, 0.42);
+      }
+
+      .callout-leader.yellow {
+        background: #f6c945;
+        box-shadow: 0 0 16px rgba(246, 201, 69, 0.42);
+      }
+
       .transition {
         z-index: 80;
         pointer-events: none;
@@ -387,6 +453,18 @@
         padding: 22px;
         border: 1px solid rgba(103, 213, 255, 0.42);
         background: rgba(7, 25, 35, 0.5);
+      }
+
+      .api-tag {
+        position: absolute;
+        left: 875px;
+        top: 314px;
+        padding: 9px 13px;
+        border: 1px solid #f6c945;
+        color: #f6c945;
+        background: rgba(7, 25, 35, 0.82);
+        font-size: 16px;
+        letter-spacing: 0.04em;
       }
 
       .formula-board {
@@ -603,6 +681,23 @@
         color: #22c55e;
       }
 
+      .verification-stamps {
+        position: absolute;
+        left: 62px;
+        bottom: 48px;
+        display: flex;
+        gap: 14px;
+      }
+
+      .mini-stamp {
+        border: 1px solid #22c55e;
+        color: #22c55e;
+        padding: 8px 12px;
+        font-size: 15px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
       #scene-close {
         justify-content: center;
       }
@@ -653,7 +748,15 @@
         data-duration="55"
         data-track-index="0"
         src="assets/blueprint-pulse.wav"
-        data-volume="0.42"
+        data-volume="0.18"
+      ></audio>
+      <audio
+        id="narration-audio"
+        data-start="0.15"
+        data-duration="49.5"
+        data-track-index="1"
+        src="assets/narration.wav"
+        data-volume="1"
       ></audio>
 
       <div class="blueprint-field"></div>
@@ -665,6 +768,11 @@
         <div class="scene-inner">
           <div class="label tag">SIGMALITE / RAW MATERIAL</div>
           <h1 class="display headline">A CSV is not a workspace.</h1>
+          <div class="explain-callout" style="grid-column: 1 / span 5; grid-row: 5">
+            <div class="callout-title">problem statement</div>
+            <p>Rows alone do not create shared understanding.</p>
+            <div class="callout-leader yellow" style="left: 24px; top: -34px"></div>
+          </div>
           <div class="draft-mark" data-layout-ignore></div>
           <div class="rows">
             <div class="csv-row"><span>name</span><span>team</span><span>city</span><span>salary</span></div>
@@ -685,6 +793,11 @@
               <div class="mono" style="font-size:24px;margin-top:16px">sample_data.csv</div>
               <div class="mono" style="font-size:16px;margin-top:18px;color:rgba(7,25,35,.55)">safe filename</div>
             </div>
+          </div>
+          <div class="explain-callout" style="grid-column: 1 / span 5; grid-row: 6">
+            <div class="callout-title">transformation</div>
+            <p>File accepted, typed, and paginated into an inspectable dataset.</p>
+            <div class="callout-leader" style="right: -118px; top: 40px"></div>
           </div>
           <div class="schema-panel paper">
             <div class="label" style="color:#0d47a1">schema inferred</div>
@@ -715,9 +828,15 @@
             <div class="selection-pulse" data-layout-ignore></div>
           </div>
           <div class="side-notes">
-            <div class="note-card"><div class="label">persisted cell updates</div><p class="micro">Edits write back through the API and refresh dataset metadata.</p></div>
+            <div class="explain-callout">
+              <div class="callout-title">editable data surface</div>
+              <p>The file becomes a grid where edits persist through the API.</p>
+              <code>PATCH /api/datasets/:id/cell</code>
+              <div class="callout-leader yellow" style="left: -92px; top: 96px"></div>
+            </div>
             <div class="note-card"><div class="label">comment markers</div><p class="micro">Cells can carry team context without leaving the sheet.</p></div>
           </div>
+          <div class="api-tag mono">PATCH /api/datasets/:id/cell</div>
         </div>
       </section>
 
@@ -729,6 +848,12 @@
             <div class="result">$82,430</div>
             <div class="dimension"></div>
             <div class="label" style="color:#102a43;margin-top:16px">aggregate formula</div>
+          </div>
+          <div class="explain-callout" style="grid-column: 1 / span 5; grid-row: 7">
+            <div class="callout-title">analysis stays in the sheet</div>
+            <p>Filter plus formula produces a computed result.</p>
+            <code>FILTER + FORMULA -> computed result</code>
+            <div class="callout-leader yellow" style="left: 24px; top: -32px"></div>
           </div>
           <div class="filter-board">
             <div class="label">FILTER: department = ops</div>
@@ -767,6 +892,12 @@
               </g>
             </svg>
           </div>
+          <div class="explain-callout" style="grid-column: 9 / span 4; grid-row: 2">
+            <div class="callout-title">visualization</div>
+            <p>Selected columns become saved chart configs.</p>
+            <code>chart config saved</code>
+            <div class="callout-leader" style="left: -108px; top: 78px"></div>
+          </div>
           <div class="stamp export-stamp">PNG export</div>
         </div>
       </section>
@@ -791,8 +922,9 @@
             <div class="cursor-label red" style="left: 680px; top: 450px">noor / cursor activity</div>
           </div>
           <div class="comment-card paper">
-            <div class="label" style="color:#e23d3d">comment</div>
-            <p class="micro" style="color:#071923;font-size:24px;margin-top:24px">Check the Ops filter before sharing this sheet.</p>
+            <div class="label" style="color:#e23d3d;font-size:22px">comment + presence</div>
+            <p class="micro" style="color:#071923;font-size:26px;margin-top:24px">Conversation stays attached to the numbers.</p>
+            <code class="mono" style="display:block;color:#0d47a1;margin-top:18px;font-size:18px">sheet/cell context</code>
           </div>
         </div>
       </section>
@@ -815,6 +947,16 @@
             <div class="node" style="left: 1096px; top: 350px">SQLAlchemy<small>persistence</small></div>
             <div class="node paper-node" style="left: 720px; top: 558px">Alembic + CI + E2E<small>release checks</small></div>
             <div class="stamp check-stamp">verified loop</div>
+            <div class="verification-stamps">
+              <div class="mini-stamp">CI</div>
+              <div class="mini-stamp">E2E</div>
+              <div class="mini-stamp">migrations</div>
+            </div>
+          </div>
+          <div class="explain-callout" style="grid-column: 1 / span 5; grid-row: 7">
+            <div class="callout-title">not a mockup</div>
+            <p>A tested full-stack loop sits under the interface.</p>
+            <div class="callout-leader" style="right: -118px; top: 44px"></div>
           </div>
         </div>
       </section>
@@ -822,6 +964,9 @@
       <section id="scene-close" class="scene">
         <div class="scene-inner">
           <h2 class="display close-title">SigmaLite</h2>
+          <div class="explain-callout" style="grid-column: 4 / span 6; grid-row: 2; align-self:end; text-align:center">
+            <div class="callout-title">from raw rows to shared analysis</div>
+          </div>
           <div class="close-sub mono">Spreadsheet-style data exploration, engineered for teams.</div>
           <div class="measure-rule"></div>
         </div>
@@ -854,6 +999,7 @@
       tl.set(".sheet-wipe", { xPercent: -115 }, 0);
       tl.set(".plotter-wipe", { scaleX: 0, transformOrigin: "left center" }, 0);
       tl.set(".iris", { clipPath: "circle(0% at 54% 52%)" }, 0);
+      tl.set(".callout-leader", { scaleX: 1, transformOrigin: "left center" }, 0);
       tl.set("#scene-open", { autoAlpha: 1 }, 0);
       tl.from(".blueprint-grid", { scale: 0.96, autoAlpha: 0, duration: 1.1, ease: "sine.inOut" }, 0.12);
       tl.to(".blueprint-grid", { x: 28, y: 18, duration: 54, ease: "none" }, 0.2);
@@ -885,6 +1031,8 @@
       tl.from("#scene-open .headline", { y: 56, autoAlpha: 0, duration: 0.76, ease: "expo.out" }, 0.48);
       tl.from("#scene-open .csv-row", { x: 95, rotation: 1.6, autoAlpha: 0, duration: 0.5, ease: "back.out(1.2)", stagger: 0.12 }, 1.02);
       tl.from("#scene-open .draft-mark", { scaleX: 0, scaleY: 0, transformOrigin: "top left", autoAlpha: 0, duration: 0.82, ease: "power4.out" }, 1.35);
+      tl.from("#scene-open .explain-callout .callout-leader", { scaleX: 0, duration: 0.36, ease: "power4.out" }, 1.62);
+      tl.from("#scene-open .explain-callout", { y: 24, autoAlpha: 0, duration: 0.48, ease: "back.out(1.2)" }, 1.75);
       sheetTransition(4.42, "#scene-upload");
 
       tl.addLabel("upload", 5.0);
@@ -892,6 +1040,8 @@
       tl.from(".intake-lane", { scaleX: 0.86, autoAlpha: 0, duration: 0.55, ease: "expo.out" }, 5.25);
       tl.from(".file-block", { x: -110, y: 10, rotation: -3, autoAlpha: 0, duration: 0.7, ease: "power4.out" }, 5.55);
       tl.to(".file-block", { x: 420, duration: 1.05, ease: "power2.inOut" }, 6.3);
+      tl.from("#scene-upload .explain-callout .callout-leader", { scaleX: 0, duration: 0.36, ease: "power4.out" }, 6.38);
+      tl.from("#scene-upload .explain-callout", { x: -30, autoAlpha: 0, duration: 0.48, ease: "back.out(1.2)" }, 6.52);
       tl.from(".schema-panel", { x: 54, autoAlpha: 0, duration: 0.56, ease: "expo.out" }, 6.78);
       tl.from(".schema-item", { x: 36, autoAlpha: 0, duration: 0.38, ease: "back.out(1.3)", stagger: 0.11 }, 7.12);
       sheetTransition(10.02, "#scene-grid");
@@ -902,7 +1052,10 @@
       tl.from(".workspace-sheet .header-cell", { y: -24, autoAlpha: 0, duration: 0.38, ease: "power4.out", stagger: 0.035 }, 11.18);
       tl.from(".workspace-sheet .cell:not(.header-cell)", { y: 18, autoAlpha: 0, duration: 0.26, ease: "power2.out", stagger: { amount: 0.55, from: "start" } }, 11.45);
       tl.from(".selection-pulse", { scale: 0.88, autoAlpha: 0, duration: 0.28, ease: "back.out(1.4)" }, 12.2);
-      tl.from(".side-notes .note-card", { x: 42, autoAlpha: 0, duration: 0.46, ease: "back.out(1.2)", stagger: 0.14 }, 12.45);
+      tl.from("#scene-grid .explain-callout .callout-leader", { scaleX: 0, duration: 0.36, ease: "power4.out" }, 12.34);
+      tl.from("#scene-grid .explain-callout", { x: 42, autoAlpha: 0, duration: 0.46, ease: "back.out(1.2)" }, 12.45);
+      tl.from(".api-tag", { scale: 0.92, y: 12, autoAlpha: 0, duration: 0.34, ease: "back.out(1.3)" }, 12.78);
+      tl.from(".side-notes .note-card", { x: 42, autoAlpha: 0, duration: 0.46, ease: "back.out(1.2)", stagger: 0.14 }, 13.0);
       irisTransition(16.02, "#scene-formula");
 
       tl.addLabel("formula", 16.5);
@@ -911,6 +1064,8 @@
       tl.from(".formula", { clipPath: "inset(0 100% 0 0)", autoAlpha: 0, duration: 0.58, ease: "steps(10)" }, 17.35);
       tl.from(".result", { scale: 0.9, autoAlpha: 0, duration: 0.52, ease: "back.out(1.4)" }, 17.88);
       tl.from(".dimension", { scaleX: 0, duration: 0.62, ease: "power4.out" }, 18.2);
+      tl.from("#scene-formula .explain-callout .callout-leader", { scaleX: 0, duration: 0.36, ease: "power4.out" }, 18.38);
+      tl.from("#scene-formula .explain-callout", { y: 24, autoAlpha: 0, duration: 0.46, ease: "back.out(1.2)" }, 18.52);
       tl.from(".filter-board", { x: 58, autoAlpha: 0, duration: 0.54, ease: "expo.out" }, 18.52);
       tl.from(".filter-row", { x: 36, autoAlpha: 0, duration: 0.32, ease: "power2.out", stagger: 0.08 }, 18.9);
       tl.from(".bracket.left", { x: -55, autoAlpha: 0, duration: 0.48, ease: "power4.out" }, 19.3);
@@ -923,7 +1078,9 @@
       tl.from(".bar", { scaleY: 0, duration: 0.68, ease: "power4.out", stagger: 0.07 }, 23.35);
       tl.from("#line-chart-path", { strokeDasharray: 1000, strokeDashoffset: 1000, duration: 0.75, ease: "power2.inOut" }, 24.0);
       tl.from("#data-dots circle", { scale: 0, transformOrigin: "center", duration: 0.3, ease: "back.out(1.5)", stagger: 0.08 }, 24.55);
-      tl.from(".export-stamp", { scale: 1.25, rotation: -8, autoAlpha: 0, duration: 0.42, ease: "back.out(1.8)" }, 25.2);
+      tl.from("#scene-chart .explain-callout .callout-leader", { scaleX: 0, duration: 0.36, ease: "power4.out" }, 24.78);
+      tl.from("#scene-chart .explain-callout", { x: 46, autoAlpha: 0, duration: 0.48, ease: "back.out(1.2)" }, 24.92);
+      tl.from(".export-stamp", { scale: 1.25, rotation: -8, autoAlpha: 0, duration: 0.42, ease: "back.out(1.8)" }, 25.58);
       sheetTransition(28.55, "#scene-collab");
 
       tl.addLabel("collab", 29.0);
@@ -941,14 +1098,18 @@
       tl.from(".architecture", { scale: 0.97, autoAlpha: 0, duration: 0.6, ease: "expo.out" }, 35.94);
       tl.from(".node", { y: 34, scale: 0.93, autoAlpha: 0, duration: 0.48, ease: "back.out(1.2)", stagger: 0.12 }, 36.42);
       tl.from(".arch-line", { strokeDasharray: 720, strokeDashoffset: 720, duration: 0.72, ease: "power2.inOut", stagger: 0.12 }, 37.1);
+      tl.from(".verification-stamps .mini-stamp", { y: 18, autoAlpha: 0, duration: 0.32, ease: "back.out(1.2)", stagger: 0.08 }, 38.0);
       tl.from(".check-stamp", { scale: 1.22, rotation: -6, autoAlpha: 0, duration: 0.42, ease: "back.out(1.8)" }, 38.4);
+      tl.from("#scene-architecture .explain-callout .callout-leader", { scaleX: 0, duration: 0.36, ease: "power4.out" }, 38.78);
+      tl.from("#scene-architecture .explain-callout", { y: 24, autoAlpha: 0, duration: 0.48, ease: "back.out(1.2)" }, 38.92);
       tl.to(".architecture", { scale: 1.025, duration: 5.4, ease: "sine.inOut" }, 38.8);
       sheetTransition(44.1, "#scene-close");
 
       tl.addLabel("close", 44.5);
-      tl.from(".close-title", { y: 54, autoAlpha: 0, duration: 0.78, ease: "expo.out" }, 44.85);
-      tl.from(".close-sub", { y: 30, autoAlpha: 0, duration: 0.62, ease: "power3.out" }, 45.45);
-      tl.from(".measure-rule", { scaleX: 0, duration: 0.7, ease: "power4.out" }, 45.9);
+      tl.from("#scene-close .explain-callout", { y: 22, autoAlpha: 0, duration: 0.5, ease: "back.out(1.2)" }, 44.78);
+      tl.from(".close-title", { y: 54, autoAlpha: 0, duration: 0.78, ease: "expo.out" }, 45.35);
+      tl.from(".close-sub", { y: 30, autoAlpha: 0, duration: 0.62, ease: "power3.out" }, 46.02);
+      tl.from(".measure-rule", { scaleX: 0, duration: 0.7, ease: "power4.out" }, 46.42);
       tl.to(".measure-rule", { boxShadow: "0 0 80px rgba(103, 213, 255, 0.8)", duration: 1.1, ease: "sine.inOut", repeat: 2, yoyo: true }, 46.8);
       tl.to("#scene-close .scene-inner", { autoAlpha: 0, y: -20, duration: 0.72, ease: "power2.in" }, 53.6);
 
