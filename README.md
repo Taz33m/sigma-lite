@@ -1,266 +1,278 @@
-# SigmaLite 📊
+# SigmaLite
 
-A collaborative, web-based data exploration and visualization platform that democratizes analytics through spreadsheet-like interactions and intuitive dashboards.
+Collaborative spreadsheet-style data exploration for CSV datasets.
 
-![SigmaLite](https://img.shields.io/badge/status-active-success.svg)
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
+SigmaLite combines a FastAPI backend with a React/MUI frontend to provide
+dataset upload, grid editing, filtering, aggregate formulas, charts, comments,
+and realtime collaboration signals in a small, inspectable codebase.
 
-## 🎯 Overview
+![Status](https://img.shields.io/badge/status-beta_candidate-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Backend](https://img.shields.io/badge/backend-FastAPI-009688)
+![Frontend](https://img.shields.io/badge/frontend-React%20%2B%20Vite-646CFF)
 
-SigmaLite bridges the simplicity of spreadsheets with the power of modern data systems, enabling users to:
-- Upload and explore datasets interactively
-- Create visualizations with drag-and-drop simplicity
-- Collaborate in real-time with team members
-- Build dashboards without writing code
+## Why SigmaLite Exists
 
-## ✨ Features
+Most teams eventually need a lightweight place to inspect tabular data, save a
+view, chart the result, and discuss the numbers. SigmaLite is a focused
+open-source implementation of that workflow:
 
-### Core Functionality
-- **📁 Data Upload**: Support for CSV files up to 10MB
-- **📊 Spreadsheet Interface**: Editable grid with sorting, filtering, and formula support
-- **📈 Interactive Visualizations**: Line, bar, scatter, and pie charts with real-time updates
-- **👥 Real-Time Collaboration**: Multi-user editing with live cursors and WebSocket sync
-- **🔐 Secure Authentication**: JWT-based auth with user workspaces
-- **💾 Persistent Storage**: Save and reload sheets and dashboards
+- Upload a CSV.
+- Explore rows in a paginated, editable grid.
+- Apply filters and aggregate calculations.
+- Save sheets and charts.
+- Add comments to a sheet or a selected cell.
+- Collaborate through WebSocket presence and cursor activity.
 
-### Technical Highlights
-- Type-safe TypeScript frontend
-- High-performance data virtualization for large datasets
-- RESTful API with query endpoints
-- PostgreSQL database with optimized queries
-- Redis caching layer for performance
-- Comprehensive test coverage
+It is intentionally smaller than a BI platform and more structured than a raw
+spreadsheet.
 
-## 🏗️ Architecture
+## Project Status
 
+SigmaLite is an MVP-plus beta candidate. The core product loop is implemented
+and covered by backend tests, frontend tests, production build, migration smoke,
+and Playwright E2E.
+
+Current beta limits:
+
+- Cell edits are last-write-wins.
+- Dataset rows are still backed by CSV files.
+- Formulas are aggregate-focused, not a full spreadsheet calculation engine.
+- CSV export covers the current grid page.
+- Rate limiting is in-process and should be paired with platform/WAF controls.
+- Collaboration covers presence, cursors, and comments, not full sharing roles.
+
+See [`PRD_COMPLIANCE.md`](PRD_COMPLIANCE.md) for the current feature matrix.
+
+## Features
+
+| Area | Capability |
+| --- | --- |
+| Authentication | Register, login, refresh tokens, current-user profile, JWT isolation |
+| Datasets | CSV upload, safe stored filenames, schema inference, pagination |
+| Grid | MUI Data Grid, editable cells, persisted updates, comment markers |
+| Filters | Visual filter builder backed by validated API filters |
+| Formulas | `SUM`, `AVG`, `MIN`, `MAX`, `COUNT`, `MEDIAN` over columns and A1 ranges |
+| Charts | Bar, line, scatter, pie charts with saved configs and PNG export |
+| Collaboration | WebSocket presence, cursor activity, persisted comments |
+| Export | CSV export with spreadsheet-formula injection neutralization |
+| Operations | Alembic migrations, production config guards, CI, E2E smoke |
+
+## Architecture
+
+```text
+frontend/ React + TypeScript + Vite + MUI + Chart.js
+    |
+    | REST API + WebSocket
+    v
+backend/ FastAPI + SQLAlchemy + Alembic + Pydantic + pandas
+    |
+    | local: SQLite + CSV upload directory
+    | prod: PostgreSQL recommended + durable upload storage
+    v
+database / uploaded dataset files
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    Frontend (React)                      │
-│  • TypeScript • Tailwind CSS • Chart.js • AG Grid       │
-└───────────────────────┬─────────────────────────────────┘
-                        │ REST API / WebSocket
-┌───────────────────────▼─────────────────────────────────┐
-│                  Backend (FastAPI)                       │
-│  • Python 3.11+ • JWT Auth • WebSocket Manager          │
-└───────────────────────┬─────────────────────────────────┘
-                        │
-        ┌───────────────┴───────────────┐
-        │                               │
-┌───────▼────────┐            ┌────────▼────────┐
-│   PostgreSQL   │            │     Redis       │
-│   (Database)   │            │    (Cache)      │
-└────────────────┘            └─────────────────┘
-```
 
-## 🚀 Quick Start
+The backend owns data validation, schema inference, filters, aggregation, cell
+updates, comments, charts, and authentication. The frontend owns the workspace
+experience, grid editing, chart rendering, export UX, and realtime UI state.
+
+More detail: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+## Quick Start
 
 ### Prerequisites
-- Node.js 18+ and npm
+
 - Python 3.11+
-- SQLite (included with Python - no installation needed!)
-- Redis (optional, for caching)
+- Node.js 22 recommended for CI parity; Node 20+ should work locally
+- npm
+- SQLite, bundled with Python
 
-### 🎯 Skip Authentication (Recommended for Testing)
+PostgreSQL is recommended for production but not required for local
+development.
 
-For quick testing, authentication is **disabled by default**. Just start the servers and go directly to the dashboard!
+### 1. Start The Backend
 
-See [docs/DISABLE_AUTH.md](docs/DISABLE_AUTH.md) for details.
-
-### Installation
-
-1. **Clone the repository**
-```bash
-git clone https://github.com/yourusername/sigmalite.git
-cd sigmalite
-```
-
-2. **Set up the backend**
 ```bash
 cd backend
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate
 pip install -r requirements.txt
 
-# Configure environment variables
 cp .env.example .env
-# Edit .env with your database credentials
+# Edit SECRET_KEY before exposing the server beyond local development.
 
-# Run migrations
 alembic upgrade head
-
-# Start the backend server
 uvicorn app.main:app --reload --port 8000
 ```
 
-3. **Set up the frontend**
+Backend:
+
+- API: <http://localhost:8000>
+- Swagger: <http://localhost:8000/docs>
+- ReDoc: <http://localhost:8000/redoc>
+- Health: <http://localhost:8000/health>
+
+### 2. Start The Frontend
+
 ```bash
 cd frontend
 npm install
-
-# Configure environment variables
 cp .env.example .env
-# Edit .env with your API URL
-
-# Start the development server
 npm run dev
 ```
 
-4. **Access the application**
-- Frontend: http://localhost:5173
-- Backend API: http://localhost:8000
-- API Docs: http://localhost:8000/docs
+Open <http://localhost:5173>, register an account, and upload a CSV.
 
-## 📁 Project Structure
+### 3. Try A Formula
 
-```
-SigmaLite/
-├── frontend/                 # React + TypeScript frontend
-│   ├── src/
-│   │   ├── components/      # Reusable UI components
-│   │   ├── pages/           # Page components
-│   │   ├── hooks/           # Custom React hooks
-│   │   ├── services/        # API services
-│   │   ├── store/           # State management
-│   │   ├── types/           # TypeScript types
-│   │   └── utils/           # Utility functions
-│   ├── public/              # Static assets
-│   └── package.json
-├── backend/                 # FastAPI backend
-│   ├── app/
-│   │   ├── api/            # API routes
-│   │   ├── core/           # Core configuration
-│   │   ├── models/         # Database models
-│   │   ├── schemas/        # Pydantic schemas
-│   │   ├── services/       # Business logic
-│   │   └── main.py         # Application entry point
-│   ├── tests/              # Backend tests
-│   └── requirements.txt
-├── docs/                   # Documentation
-│   ├── PRD.md             # Product Requirements Document
-│   └── architecture.md    # Architecture details
-└── README.md
+After creating a sheet, edit a numeric cell with one of:
+
+```text
+=SUM(age)
+=AVG(B:B)
+=COUNT(A1:A5)
 ```
 
-## 🧪 Testing
+The backend evaluates supported aggregate formulas and persists the result to
+the CSV backing file.
 
-### Frontend Tests
+## Verification
+
+Run the same checks expected before opening a PR:
+
 ```bash
-cd frontend
-npm test                    # Run unit tests
-npm run test:coverage      # Generate coverage report
-```
-
-### Backend Tests
-```bash
+# Backend
 cd backend
-pytest                     # Run all tests
-pytest --cov=app          # Run with coverage
-```
+uv run python -m pytest -q
 
-## 📊 API Documentation
+# Fresh migration smoke
+rm -f migration_smoke.db
+DATABASE_URL=sqlite:///./migration_smoke.db \
+  SECRET_KEY=migration-smoke-secret-with-enough-entropy \
+  uv run alembic upgrade head
 
-Once the backend is running, visit:
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
-
-### Key Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/auth/register` | POST | Register new user |
-| `/api/auth/login` | POST | Login and get JWT token |
-| `/api/datasets` | GET/POST | List or upload datasets |
-| `/api/datasets/{id}` | GET/PUT/DELETE | Manage specific dataset |
-| `/api/datasets/{id}/filter` | POST | Filter dataset |
-| `/api/datasets/{id}/aggregate` | POST | Aggregate data |
-| `/api/charts` | GET/POST | Create and list charts |
-| `/ws/collaborate/{sheet_id}` | WebSocket | Real-time collaboration |
-
-## 🎨 Tech Stack
-
-### Frontend
-- **React 18** with TypeScript
-- **Vite** for fast builds
-- **Material-UI (MUI)** for UI components and styling
-- **MUI X Data Grid** for spreadsheet functionality
-- **Chart.js** for visualizations
-- **Zustand** for state management
-- **React Query** for data fetching
-
-### Backend
-- **FastAPI** for high-performance API
-- **SQLAlchemy** for ORM
-- **Alembic** for migrations
-- **PostgreSQL** for database
-- **Redis** for caching
-- **JWT** for authentication
-- **WebSockets** for real-time features
-- **Pydantic** for validation
-
-## 🔒 Security
-
-- JWT-based authentication with refresh tokens
-- Password hashing with bcrypt
-- Input sanitization and validation
-- Rate limiting on API endpoints
-- CORS configuration
-- SQL injection prevention via ORM
-- XSS protection
-
-## 🚀 Deployment
-
-### Frontend (Vercel)
-```bash
-cd frontend
+# Frontend
+cd ../frontend
+npm test -- --run
 npm run build
-vercel --prod
+npm run test:e2e -- --project=chromium
+npm audit --omit=dev --audit-level=high
 ```
 
-### Backend (Render)
-1. Create a new Web Service on Render
-2. Connect your GitHub repository
-3. Set build command: `pip install -r requirements.txt`
-4. Set start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-5. Add environment variables
+The Playwright E2E test starts an isolated backend on `127.0.0.1:8001` and a
+Vite frontend on `127.0.0.1:5174`.
 
-### Database (Render PostgreSQL)
-1. Create a PostgreSQL instance on Render
-2. Copy connection string to backend `.env`
+## API Surface
 
-## 📈 Performance Metrics
+| Endpoint | Method | Purpose |
+| --- | --- | --- |
+| `/health` | GET | Service health |
+| `/api/auth/register` | POST | Create user |
+| `/api/auth/login` | POST | Issue access and refresh tokens |
+| `/api/auth/refresh` | POST | Rotate tokens |
+| `/api/auth/me` | GET | Current user profile |
+| `/api/datasets` | GET, POST | List or upload datasets |
+| `/api/datasets/{id}` | GET, PUT, DELETE | Dataset metadata |
+| `/api/datasets/{id}/data` | GET | Paginated rows |
+| `/api/datasets/{id}/filter` | POST | Filter rows |
+| `/api/datasets/{id}/aggregate` | POST | Aggregate a column |
+| `/api/datasets/{id}/cell` | PATCH | Persist one cell update |
+| `/api/sheets` | GET, POST | List or create sheets |
+| `/api/sheets/{id}` | GET, PUT, DELETE | Sheet metadata/config |
+| `/api/sheets/{id}/comments` | GET, POST | Sheet/cell comments |
+| `/api/charts` | GET, POST | List or create charts |
+| `/api/charts/{id}` | GET, PUT, DELETE | Chart metadata/config |
+| `/ws/collaborate/{sheet_id}` | WS | Realtime presence and activity |
 
-| Metric | Target | Status |
-|--------|--------|--------|
-| Initial load (10K rows) | < 2s | ✅ |
-| Chart render time | < 500ms | ✅ |
-| API response time | < 200ms | ✅ |
-| Test coverage | > 80% | ✅ |
-| Concurrent users | 10+ | ✅ |
+## Configuration
 
-## 🤝 Contributing
+Backend configuration lives in `backend/.env`.
 
-Contributions are welcome! Please follow these steps:
+Required for any non-local deployment:
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+```env
+DATABASE_URL=postgresql://user:password@host:5432/sigmalite
+SECRET_KEY=replace-with-a-long-random-secret
+ALLOWED_ORIGINS=https://your-frontend.example
+DISABLE_AUTH=False
+ENVIRONMENT=production
+```
 
-## 📝 License
+Frontend configuration lives in `frontend/.env`.
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+```env
+VITE_API_URL=http://localhost:8000
+VITE_DISABLE_AUTH=false
+```
 
-## 🙏 Acknowledgments
+`DISABLE_AUTH=True` is only for local demos. Production mode rejects disabled
+auth, weak secrets, and wildcard CORS.
 
-- Inspired by [Sigma Computing](https://www.sigmacomputing.com/)
-- Built as a demonstration of full-stack engineering capabilities
-- Special thanks to the open-source community
+## Repository Layout
 
-## 📧 Contact
+```text
+.
+├── backend/                 FastAPI app, Alembic migrations, pytest suite
+├── frontend/                React/Vite app, Vitest tests, Playwright E2E
+├── docs/                    Architecture, development, roadmap, PRD docs
+├── .github/workflows/       CI
+├── .github/ISSUE_TEMPLATE/  Issue forms
+├── CONTRIBUTING.md          Contributor workflow
+├── SECURITY.md              Vulnerability reporting policy
+├── CODE_OF_CONDUCT.md       Community expectations
+├── SUPPORT.md               Support expectations
+├── GOVERNANCE.md            Maintainer and release model
+├── CHANGELOG.md             Release history
+└── LICENSE                  MIT license
+```
 
-For questions or feedback, please open an issue or reach out to the maintainers.
+## Production Notes
 
----
+SigmaLite can be deployed as separate frontend and backend services.
 
-**Built with ❤️ for democratizing data analytics**
+Recommended production posture:
+
+- PostgreSQL for `DATABASE_URL`.
+- Durable upload storage or mounted persistent disk for uploaded CSVs.
+- Strong `SECRET_KEY`, managed as a secret.
+- Explicit `ALLOWED_ORIGINS`.
+- HTTPS termination at the platform/load balancer.
+- Platform or WAF-level rate limiting in front of the app.
+- Backups for the database and uploaded files.
+- Migration release step: `alembic upgrade head`.
+
+Deployment checklist: [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md#deployment-smoke-checklist).
+
+## Documentation
+
+- [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md): setup, testing, migrations, deployment.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): system design and data flow.
+- [`docs/ROADMAP.md`](docs/ROADMAP.md): planned beta and production work.
+- [`docs/DISABLE_AUTH.md`](docs/DISABLE_AUTH.md): local auth bypass behavior and risks.
+- [`PRD_COMPLIANCE.md`](PRD_COMPLIANCE.md): current implementation status.
+
+## Contributing
+
+Contributions are welcome. Start with [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+Before opening a PR:
+
+1. Keep changes scoped.
+2. Add or update tests for behavior changes.
+3. Run backend tests, frontend tests, build, and E2E smoke.
+4. Include screenshots for UI changes.
+
+## Security
+
+Do not open public issues for vulnerabilities. Follow [`SECURITY.md`](SECURITY.md)
+for private reporting expectations.
+
+## Support
+
+Use GitHub Issues for reproducible bugs and feature requests. See
+[`SUPPORT.md`](SUPPORT.md) for what to include.
+
+## License
+
+SigmaLite is released under the MIT License. See [`LICENSE`](LICENSE).

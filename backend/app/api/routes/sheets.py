@@ -5,8 +5,12 @@ from typing import List
 from app.core.database import get_db
 from app.api.deps import get_current_user
 from app.models.user import User
-from app.models.dataset import Sheet as SheetModel, Dataset as DatasetModel
-from app.schemas.dataset import Sheet, SheetCreate, SheetUpdate
+from app.models.dataset import (
+    Comment as CommentModel,
+    Dataset as DatasetModel,
+    Sheet as SheetModel,
+)
+from app.schemas.dataset import Comment, CommentCreate, Sheet, SheetCreate, SheetUpdate
 
 router = APIRouter()
 
@@ -84,6 +88,101 @@ def get_sheet(
     return sheet
 
 
+def _get_owned_sheet(sheet_id: int, db: Session, current_user: User) -> SheetModel:
+    sheet = db.query(SheetModel).filter(
+        SheetModel.id == sheet_id,
+        SheetModel.owner_id == current_user.id
+    ).first()
+
+    if not sheet:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Sheet not found"
+        )
+
+    return sheet
+
+
+def _comment_to_schema(comment: CommentModel) -> dict:
+    return {
+        "id": comment.id,
+        "sheet_id": comment.sheet_id,
+        "owner_id": comment.owner_id,
+        "username": comment.owner.username,
+        "text": comment.text,
+        "row_index": comment.row_index,
+        "column": comment.column,
+        "created_at": comment.created_at,
+        "updated_at": comment.updated_at,
+    }
+
+
+@router.get("/{sheet_id}/comments", response_model=List[Comment])
+def list_comments(
+    sheet_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """List persisted comments for a sheet."""
+    _get_owned_sheet(sheet_id, db, current_user)
+
+    comments = db.query(CommentModel).filter(
+        CommentModel.sheet_id == sheet_id
+    ).order_by(CommentModel.created_at.asc(), CommentModel.id.asc()).all()
+
+    return [_comment_to_schema(comment) for comment in comments]
+
+
+@router.post(
+    "/{sheet_id}/comments",
+    response_model=Comment,
+    status_code=status.HTTP_201_CREATED
+)
+def create_comment(
+    sheet_id: int,
+    comment_in: CommentCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Create a persisted sheet comment."""
+    sheet = _get_owned_sheet(sheet_id, db, current_user)
+
+    if comment_in.row_index is not None:
+        row_count = sheet.dataset.row_count if sheet.dataset else 0
+        if comment_in.row_index >= row_count:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Comment row index is outside the dataset",
+            )
+
+    if comment_in.column is not None:
+        columns = []
+        if sheet.dataset and sheet.dataset.schema:
+            columns = [
+                column.get("name")
+                for column in sheet.dataset.schema.get("columns", [])
+            ]
+        if comment_in.column not in columns:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Column '{comment_in.column}' not found",
+            )
+
+    comment = CommentModel(
+        sheet_id=sheet_id,
+        owner_id=current_user.id,
+        text=comment_in.text,
+        row_index=comment_in.row_index,
+        column=comment_in.column,
+    )
+
+    db.add(comment)
+    db.commit()
+    db.refresh(comment)
+
+    return _comment_to_schema(comment)
+
+
 @router.put("/{sheet_id}", response_model=Sheet)
 def update_sheet(
     sheet_id: int,
@@ -103,7 +202,7 @@ def update_sheet(
             detail="Sheet not found"
         )
     
-    update_data = sheet_update.dict(exclude_unset=True)
+    update_data = sheet_update.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(sheet, field, value)
     

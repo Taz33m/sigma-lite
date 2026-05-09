@@ -1,4 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import {
   AppBar,
   Toolbar,
@@ -7,30 +10,989 @@ import {
   Box,
   Paper,
   IconButton,
+  CircularProgress,
+  Alert,
+  Stack,
+  Chip,
+  Divider,
+  List,
+  ListItem,
+  ListItemText,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  TextField,
+  Button,
 } from '@mui/material';
-import { ArrowBack } from '@mui/icons-material';
+import {
+  ArrowBack,
+  Calculate,
+  FilterAlt,
+  Save,
+  Send,
+} from '@mui/icons-material';
+import {
+  type GridColDef,
+  type GridRowModel,
+  type GridPaginationModel,
+} from '@mui/x-data-grid';
+import { chartAPI, datasetAPI, sheetAPI } from '@/lib/api';
+import {
+  buildDatasetGridColumns,
+  buildDatasetGridRows,
+  type DatasetGridRow,
+} from '@/lib/datasetGrid';
+import { downloadCsv } from '@/lib/exportCsv';
+import { ChartPreview, SavedChartCard } from '@/pages/sheet/ChartPreview';
+import { DataGridPanel, SheetSummaryBar } from '@/pages/sheet/WorkspacePanels';
+import { useSheetSocket } from '@/pages/sheet/useSheetSocket';
+import type {
+  CollaborationComment,
+  SelectedCell,
+  SheetViewConfig,
+} from '@/pages/sheet/types';
+import type {
+  AggregateRequest,
+  AggregateResult,
+  Chart as SavedChart,
+  ChartCreate,
+  FilterRequest,
+} from '@/types';
+
+const filterOperators: FilterRequest['operator'][] = [
+  'eq',
+  'ne',
+  'gt',
+  'lt',
+  'gte',
+  'lte',
+  'contains',
+  'startswith',
+  'endswith',
+];
+
+const aggregateOperations: AggregateRequest['operation'][] = [
+  'sum',
+  'avg',
+  'min',
+  'max',
+  'count',
+  'median',
+];
+
+const chartTypes: ChartCreate['chart_type'][] = ['bar', 'line', 'scatter', 'pie'];
 
 export default function SheetPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const sheetId = Number(id);
+  const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({
+    page: 0,
+    pageSize: 25,
+  });
+  const [filterLogic, setFilterLogic] = useState<'and' | 'or'>('and');
+  const [filters, setFilters] = useState<FilterRequest[]>([]);
+  const [filterDraft, setFilterDraft] = useState<FilterRequest>({
+    column: '',
+    operator: 'eq',
+    value: '',
+  });
+  const [aggregateDraft, setAggregateDraft] = useState<AggregateRequest>({
+    column: '',
+    operation: 'sum',
+  });
+  const [aggregateResult, setAggregateResult] = useState<AggregateResult | null>(null);
+  const [selectedCell, setSelectedCell] = useState<SelectedCell | null>(null);
+  const [commentDraft, setCommentDraft] = useState('');
+  const [chartDraft, setChartDraft] = useState<ChartCreate>({
+    name: 'New chart',
+    chart_type: 'bar',
+    sheet_id: sheetId,
+    config: {
+      x_axis: '',
+      y_axis: '',
+    },
+  });
+  const [hydratedSheetId, setHydratedSheetId] = useState<number | null>(null);
+  const {
+    activeUsers,
+    activeUserCount,
+    cursorActivity,
+    realtimeComments,
+    sendSocketMessage,
+  } = useSheetSocket(Number.isFinite(sheetId) ? sheetId : undefined);
+
+  const {
+    data: sheet,
+    isLoading: isSheetLoading,
+    isError: isSheetError,
+  } = useQuery({
+    queryKey: ['sheet', id],
+    queryFn: () => sheetAPI.get(sheetId),
+    enabled: Number.isFinite(sheetId),
+  });
+
+  const {
+    data: dataset,
+    isLoading: isDatasetLoading,
+    isError: isDatasetError,
+  } = useQuery({
+    queryKey: ['dataset', sheet?.dataset_id],
+    queryFn: () => datasetAPI.get(sheet!.dataset_id),
+    enabled: Boolean(sheet?.dataset_id),
+  });
+
+  const {
+    data: datasetData,
+    isLoading: isDataLoading,
+    isError: isDataError,
+  } = useQuery({
+    queryKey: [
+      'sheet-data',
+      sheet?.dataset_id,
+      paginationModel.page,
+      paginationModel.pageSize,
+      filterLogic,
+      JSON.stringify(filters),
+    ],
+    queryFn: () =>
+      filters.length
+        ? datasetAPI.filter(sheet!.dataset_id, {
+            filters,
+            logic: filterLogic,
+            page: paginationModel.page + 1,
+            page_size: paginationModel.pageSize,
+          })
+        : datasetAPI.getData(
+            sheet!.dataset_id,
+            paginationModel.page + 1,
+            paginationModel.pageSize
+          ),
+    enabled: Boolean(sheet?.dataset_id),
+  });
+
+  const { data: charts = [] } = useQuery({
+    queryKey: ['charts', sheetId],
+    queryFn: () => chartAPI.list(sheetId),
+    enabled: Number.isFinite(sheetId),
+  });
+
+  const { data: persistedComments = [] } = useQuery({
+    queryKey: ['comments', sheetId],
+    queryFn: () => sheetAPI.listComments(sheetId),
+    enabled: Number.isFinite(sheetId),
+  });
+
+  const rows = buildDatasetGridRows(datasetData?.data);
+  const commentAnchors = useMemo(
+    () =>
+      new Set(
+        persistedComments
+          .filter((comment) => comment.row_index !== null && comment.column)
+          .map((comment) => `${comment.row_index}:${comment.column}`)
+      ),
+    [persistedComments]
+  );
+  const columns: GridColDef[] = useMemo(() => {
+    const baseColumns = datasetData?.data.length
+      ? buildDatasetGridColumns(datasetData.data)
+      : dataset?.schema?.columns.map((column) => ({
+          field: column.name,
+          headerName: column.name,
+          width: 150,
+          editable: true,
+        })) || [];
+
+    return baseColumns.map((column) => ({
+      ...column,
+      renderCell: (params) => {
+        const sourceIndex = params.row.__source_index ?? params.row.__row_id;
+        const hasComment = commentAnchors.has(`${sourceIndex}:${params.field}`);
+        return (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
+            {hasComment && (
+              <Box
+                aria-label="Cell has comments"
+                sx={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: '50%',
+                  bgcolor: 'warning.main',
+                  flexShrink: 0,
+                }}
+              />
+            )}
+            <Typography variant="body2" noWrap>
+              {String(params.value ?? '')}
+            </Typography>
+          </Box>
+        );
+      },
+    }));
+  }, [commentAnchors, dataset?.schema?.columns, datasetData?.data]);
+  const schemaColumns = dataset?.schema?.columns || [];
+  const numericColumns = schemaColumns.filter(
+    (column) => column.semantic_type === 'numeric'
+  );
+  const isLoading = isSheetLoading || isDatasetLoading;
+  const isError =
+    isSheetError || isDatasetError || isDataError || !Number.isFinite(sheetId);
+
+  const aggregateMutation = useMutation({
+    mutationFn: (request: AggregateRequest) =>
+      datasetAPI.aggregate(sheet!.dataset_id, request),
+    onSuccess: (result) => {
+      setAggregateResult(result);
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.detail || 'Aggregation failed');
+    },
+  });
+
+  const saveViewMutation = useMutation({
+    mutationFn: () =>
+      sheetAPI.update(sheet!.id, {
+        config: {
+          filters,
+          filterLogic,
+          pageSize: paginationModel.pageSize,
+          chartDraft,
+        },
+      }),
+    onSuccess: () => {
+      toast.success('View saved');
+      queryClient.invalidateQueries({ queryKey: ['sheet', id] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.detail || 'Could not save view');
+    },
+  });
+
+  const createChartMutation = useMutation({
+    mutationFn: (chart: ChartCreate) => chartAPI.create(chart),
+    onSuccess: () => {
+      toast.success('Chart saved');
+      queryClient.invalidateQueries({ queryKey: ['charts', sheetId] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.detail || 'Could not save chart');
+    },
+  });
+
+  const createCommentMutation = useMutation({
+    mutationFn: (comment: { text: string; row_index?: number; column?: string }) =>
+      sheetAPI.createComment(sheetId, comment),
+    onSuccess: (comment) => {
+      queryClient.invalidateQueries({ queryKey: ['comments', sheetId] });
+      sendSocketMessage({
+        type: 'comment',
+        id: comment.id,
+        text: comment.text,
+        row_index: comment.row_index,
+        column: comment.column,
+        timestamp: comment.created_at,
+      });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.detail || 'Could not save comment');
+    },
+  });
+
+  const updateCellMutation = useMutation({
+    mutationFn: ({
+      rowIndex,
+      column,
+      value,
+    }: {
+      rowIndex: number;
+      column: string;
+      value: unknown;
+    }) => datasetAPI.updateCell(sheet!.dataset_id, {
+      row_index: rowIndex,
+      column,
+      value,
+    }),
+    onSuccess: (_result, variables) => {
+      toast.success('Cell saved');
+      queryClient.invalidateQueries({ queryKey: ['sheet-data'] });
+      queryClient.invalidateQueries({ queryKey: ['dataset', sheet?.dataset_id] });
+      sendSocketMessage({
+        type: 'cell_update',
+        row: variables.rowIndex,
+        column: variables.column,
+        value: variables.value,
+        timestamp: new Date().toISOString(),
+      });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.detail || 'Could not save cell');
+    },
+  });
+
+  const addFilter = () => {
+    const column = filterDraft.column || schemaColumns[0]?.name;
+    if (!column) {
+      return;
+    }
+
+    setFilters((current) => [
+      ...current,
+      {
+        column,
+        operator: filterDraft.operator,
+        value: filterDraft.value,
+      },
+    ]);
+    setPaginationModel((current) => ({ ...current, page: 0 }));
+    setFilterDraft((current) => ({ ...current, column, value: '' }));
+  };
+
+  const clearFilters = () => {
+    setFilters([]);
+    setPaginationModel((current) => ({ ...current, page: 0 }));
+  };
+
+  useEffect(() => {
+    if (!sheet || hydratedSheetId === sheet.id) {
+      return;
+    }
+
+    const config = sheet.config as SheetViewConfig | undefined;
+    if (config?.filters) {
+      setFilters(config.filters);
+    }
+    if (config?.filterLogic) {
+      setFilterLogic(config.filterLogic);
+    }
+    if (config?.pageSize) {
+      setPaginationModel((current) => ({
+        ...current,
+        page: 0,
+        pageSize: config.pageSize || current.pageSize,
+      }));
+    }
+    if (config?.chartDraft) {
+      setChartDraft((current) => ({
+        ...current,
+        ...config.chartDraft,
+        sheet_id: sheet.id,
+        config: {
+          ...current.config,
+          ...config.chartDraft?.config,
+        },
+      }));
+    }
+
+    setHydratedSheetId(sheet.id);
+  }, [hydratedSheetId, sheet]);
+
+  const processRowUpdate = async (
+    newRow: GridRowModel<DatasetGridRow>,
+    oldRow: GridRowModel<DatasetGridRow>
+  ) => {
+    const changedColumn = Object.keys(newRow).find(
+      (key) => !key.startsWith('__') && newRow[key] !== oldRow[key]
+    );
+
+    if (!changedColumn || !sheet) {
+      return oldRow;
+    }
+
+    const sourceIndex = Number(
+      newRow.__source_index ??
+        paginationModel.page * paginationModel.pageSize + newRow.__row_id
+    );
+    await updateCellMutation.mutateAsync({
+      rowIndex: sourceIndex,
+      column: changedColumn,
+      value: newRow[changedColumn],
+    });
+
+    return newRow;
+  };
+
+  const sendComment = () => {
+    const text = commentDraft.trim();
+    if (!text) {
+      return;
+    }
+
+    createCommentMutation.mutate({
+      text,
+      row_index: selectedCell?.rowIndex,
+      column: selectedCell?.column,
+    });
+    setCommentDraft('');
+  };
+
+  const visibleComments: CollaborationComment[] = [
+    ...persistedComments.map((comment) => ({
+      id: comment.id,
+      username: comment.username,
+      text: comment.text,
+      timestamp: comment.created_at,
+      row_index: comment.row_index,
+      column: comment.column,
+    })),
+    ...realtimeComments,
+  ].filter(
+    (comment, index, allComments) =>
+      comment.id === undefined ||
+      allComments.findIndex((candidate) => candidate.id === comment.id) === index
+  );
+
+  const selectedCellComments = selectedCell
+    ? visibleComments.filter(
+        (comment) =>
+          comment.row_index === selectedCell.rowIndex &&
+          comment.column === selectedCell.column
+      )
+    : [];
+  const displayedComments = selectedCellComments.length
+    ? selectedCellComments
+    : visibleComments.slice(-5);
+
+  const runAggregation = () => {
+    const column = aggregateDraft.column || numericColumns[0]?.name;
+    if (!column) {
+      return;
+    }
+
+    aggregateMutation.mutate({
+      ...aggregateDraft,
+      column,
+      group_by: aggregateDraft.group_by?.length ? aggregateDraft.group_by : undefined,
+    });
+    setAggregateDraft((current) => ({ ...current, column }));
+  };
+
+  const saveChart = () => {
+    const xField = chartDraft.config.x_axis || schemaColumns[0]?.name;
+    const yField = chartDraft.config.y_axis || numericColumns[0]?.name;
+    if (!sheet || !xField || !yField) {
+      return;
+    }
+
+    createChartMutation.mutate({
+      ...chartDraft,
+      sheet_id: sheet.id,
+      config: {
+        ...chartDraft.config,
+        x_axis: String(xField),
+        y_axis: String(yField),
+        labels: String(xField),
+        values: String(yField),
+      },
+    });
+  };
+
+  const previewChart: SavedChart | null = sheet
+    ? {
+        id: 0,
+        name: chartDraft.name,
+        chart_type: chartDraft.chart_type,
+        sheet_id: sheet.id,
+        owner_id: sheet.owner_id,
+        config: chartDraft.config,
+        created_at: '',
+      }
+    : null;
 
   return (
     <Box>
       <AppBar position="static">
         <Toolbar>
-          <IconButton edge="start" color="inherit" onClick={() => navigate('/')} sx={{ mr: 2 }}>
+          <IconButton
+            edge="start"
+            color="inherit"
+            onClick={() => navigate(dataset ? `/dataset/${dataset.id}` : '/')}
+            sx={{ mr: 2 }}
+          >
             <ArrowBack />
           </IconButton>
-          <Typography variant="h6">Sheet {id}</Typography>
+          <Box sx={{ flexGrow: 1 }}>
+            <Typography variant="h6">{sheet?.name || 'Sheet'}</Typography>
+            <Typography variant="caption">{dataset?.name}</Typography>
+          </Box>
         </Toolbar>
       </AppBar>
 
-      <Container maxWidth="lg" sx={{ mt: 4 }}>
-        <Paper sx={{ p: 4, textAlign: 'center' }}>
-          <Typography variant="h5" color="text.secondary">
-            Sheet collaboration view - Coming soon!
-          </Typography>
-        </Paper>
+      <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
+        {isLoading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+            <CircularProgress />
+          </Box>
+        ) : isError ? (
+          <Alert severity="error">Unable to load this sheet.</Alert>
+        ) : (
+          <Stack spacing={3}>
+            <SheetSummaryBar
+              dataset={dataset}
+              sheet={sheet}
+              activeCount={activeUserCount || activeUsers.length}
+              filterCount={filters.length}
+              rowCountLabel={`${(dataset?.row_count || 0).toLocaleString()} rows`}
+              saving={saveViewMutation.isPending}
+              canExport={rows.length > 0}
+              onSave={() => saveViewMutation.mutate()}
+              onExport={() =>
+                downloadCsv(rows, `${sheet?.name || 'sheet'}-current-page.csv`)
+              }
+            />
+
+            <Stack direction={{ xs: 'column', lg: 'row' }} spacing={3}>
+              <DataGridPanel
+                rows={rows}
+                columns={columns}
+                rowCount={datasetData?.total_rows || 0}
+                loading={isDataLoading}
+                paginationModel={paginationModel}
+                onPaginationModelChange={setPaginationModel}
+                processRowUpdate={processRowUpdate}
+                onProcessRowUpdateError={(error) => {
+                  toast.error(error instanceof Error ? error.message : 'Cell update failed');
+                }}
+                onCellSelect={(rowIndex, column) => {
+                  setSelectedCell({ rowIndex, column });
+                  sendSocketMessage({
+                    type: 'cursor_move',
+                    row: rowIndex,
+                    column,
+                  });
+                }}
+              />
+
+              <Paper sx={{ p: 2, width: { xs: '100%', lg: 320 } }}>
+                <Stack spacing={3}>
+                  <Box>
+                    <Typography variant="h6" gutterBottom>
+                      Filters
+                    </Typography>
+                    <Stack spacing={2}>
+                      <FormControl fullWidth size="small">
+                        <InputLabel id="filter-column-label">Column</InputLabel>
+                        <Select
+                          labelId="filter-column-label"
+                          label="Column"
+                          value={filterDraft.column}
+                          onChange={(event) =>
+                            setFilterDraft((current) => ({
+                              ...current,
+                              column: event.target.value,
+                            }))
+                          }
+                        >
+                          {schemaColumns.map((column) => (
+                            <MenuItem key={column.name} value={column.name}>
+                              {column.name}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+
+                      <Stack direction="row" spacing={1}>
+                        <FormControl size="small" sx={{ minWidth: 112 }}>
+                          <InputLabel id="filter-logic-label">Logic</InputLabel>
+                          <Select
+                            labelId="filter-logic-label"
+                            label="Logic"
+                            value={filterLogic}
+                            onChange={(event) => {
+                              setFilterLogic(event.target.value as 'and' | 'or');
+                              setPaginationModel((current) => ({ ...current, page: 0 }));
+                            }}
+                          >
+                            <MenuItem value="and">AND</MenuItem>
+                            <MenuItem value="or">OR</MenuItem>
+                          </Select>
+                        </FormControl>
+                        <FormControl size="small" sx={{ flex: 1 }}>
+                          <InputLabel id="filter-operator-label">Operator</InputLabel>
+                          <Select
+                            labelId="filter-operator-label"
+                            label="Operator"
+                            value={filterDraft.operator}
+                            onChange={(event) =>
+                              setFilterDraft((current) => ({
+                                ...current,
+                                operator: event.target.value as FilterRequest['operator'],
+                              }))
+                            }
+                          >
+                            {filterOperators.map((operator) => (
+                              <MenuItem key={operator} value={operator}>
+                                {operator}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      </Stack>
+
+                      <TextField
+                        size="small"
+                        label="Value"
+                        value={String(filterDraft.value)}
+                        onChange={(event) =>
+                          setFilterDraft((current) => ({
+                            ...current,
+                            value: event.target.value,
+                          }))
+                        }
+                      />
+
+                      <Stack direction="row" spacing={1}>
+                        <Button
+                          variant="contained"
+                          startIcon={<FilterAlt />}
+                          onClick={addFilter}
+                          disabled={!schemaColumns.length}
+                        >
+                          Add
+                        </Button>
+                        <Button onClick={clearFilters} disabled={!filters.length}>
+                          Clear
+                        </Button>
+                      </Stack>
+
+                      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                        {filters.map((filter, index) => (
+                          <Chip
+                            key={`${filter.column}-${filter.operator}-${index}`}
+                            label={`${filter.column} ${filter.operator} ${filter.value}`}
+                            onDelete={() => {
+                              setFilters((current) =>
+                                current.filter((_, filterIndex) => filterIndex !== index)
+                              );
+                              setPaginationModel((current) => ({ ...current, page: 0 }));
+                            }}
+                          />
+                        ))}
+                      </Stack>
+                    </Stack>
+                  </Box>
+
+                  <Box>
+                    <Typography variant="h6" gutterBottom>
+                      Summary
+                    </Typography>
+                    <Stack spacing={2}>
+                      <FormControl fullWidth size="small">
+                        <InputLabel id="aggregate-column-label">Column</InputLabel>
+                        <Select
+                          labelId="aggregate-column-label"
+                          label="Column"
+                          value={aggregateDraft.column}
+                          onChange={(event) =>
+                            setAggregateDraft((current) => ({
+                              ...current,
+                              column: event.target.value,
+                            }))
+                          }
+                        >
+                          {numericColumns.map((column) => (
+                            <MenuItem key={column.name} value={column.name}>
+                              {column.name}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+
+                      <Stack direction="row" spacing={1}>
+                        <FormControl size="small" sx={{ minWidth: 120 }}>
+                          <InputLabel id="aggregate-operation-label">Operation</InputLabel>
+                          <Select
+                            labelId="aggregate-operation-label"
+                            label="Operation"
+                            value={aggregateDraft.operation}
+                            onChange={(event) =>
+                              setAggregateDraft((current) => ({
+                                ...current,
+                                operation: event.target.value as AggregateRequest['operation'],
+                              }))
+                            }
+                          >
+                            {aggregateOperations.map((operation) => (
+                              <MenuItem key={operation} value={operation}>
+                                {operation}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+
+                        <FormControl size="small" sx={{ flex: 1 }}>
+                          <InputLabel id="aggregate-group-label">Group</InputLabel>
+                          <Select
+                            labelId="aggregate-group-label"
+                            label="Group"
+                            value={aggregateDraft.group_by?.[0] || ''}
+                            onChange={(event) =>
+                              setAggregateDraft((current) => ({
+                                ...current,
+                                group_by: event.target.value ? [event.target.value] : undefined,
+                              }))
+                            }
+                          >
+                            <MenuItem value="">None</MenuItem>
+                            {schemaColumns.map((column) => (
+                              <MenuItem key={column.name} value={column.name}>
+                                {column.name}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      </Stack>
+
+                      <Button
+                        variant="outlined"
+                        startIcon={<Calculate />}
+                        onClick={runAggregation}
+                        disabled={!numericColumns.length || aggregateMutation.isPending}
+                      >
+                        {aggregateMutation.isPending ? 'Running...' : 'Run'}
+                      </Button>
+
+                      {aggregateResult && (
+                        <Paper variant="outlined" sx={{ p: 1.5 }}>
+                          {aggregateResult.group_results ? (
+                            <Stack spacing={1}>
+                              {aggregateResult.group_results.slice(0, 6).map((row, index) => (
+                                <Typography key={index} variant="body2">
+                                  {Object.entries(row)
+                                    .map(([key, value]) => `${key}: ${value}`)
+                                    .join(' · ')}
+                                </Typography>
+                              ))}
+                            </Stack>
+                          ) : (
+                            <Typography variant="h6">
+                              {aggregateResult.result}
+                            </Typography>
+                          )}
+                        </Paper>
+                      )}
+                    </Stack>
+                  </Box>
+
+                  <Box>
+                    <Typography variant="h6" gutterBottom>
+                      Columns
+                    </Typography>
+                    <Divider />
+                    <List dense>
+                      {schemaColumns.map((column) => (
+                        <ListItem key={column.name} disableGutters>
+                          <ListItemText
+                            primary={column.name}
+                            secondary={`${column.semantic_type} · ${column.type}`}
+                          />
+                        </ListItem>
+                      ))}
+                    </List>
+                  </Box>
+
+                  <Box>
+                    <Typography variant="h6" gutterBottom>
+                      Collaboration
+                    </Typography>
+                    <Stack spacing={1.5}>
+                      {selectedCell && (
+                        <Chip
+                          size="small"
+                          color="warning"
+                          variant="outlined"
+                          label={`Selected ${selectedCell.column} row ${selectedCell.rowIndex + 1}`}
+                        />
+                      )}
+                      {cursorActivity ? (
+                        <Typography variant="body2" color="text.secondary">
+                          {cursorActivity.username} is on row {cursorActivity.row}, column{' '}
+                          {cursorActivity.column}
+                        </Typography>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary">
+                          No recent cursor activity
+                        </Typography>
+                      )}
+                      <TextField
+                        size="small"
+                        label="Comment"
+                        value={commentDraft}
+                        onChange={(event) => setCommentDraft(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault();
+                            sendComment();
+                          }
+                        }}
+                      />
+                      <Button
+                        variant="outlined"
+                        startIcon={<Send />}
+                        disabled={!commentDraft.trim() || createCommentMutation.isPending}
+                        onClick={sendComment}
+                      >
+                        {createCommentMutation.isPending ? 'Sending...' : 'Send'}
+                      </Button>
+                      <Stack spacing={1}>
+                        {displayedComments.map((comment, index) => (
+                          <Paper
+                            key={`${comment.id || comment.timestamp}-${index}`}
+                            variant="outlined"
+                            sx={{ p: 1 }}
+                          >
+                            <Typography variant="caption" color="text.secondary">
+                              {comment.username}
+                              {comment.row_index !== null &&
+                              comment.row_index !== undefined &&
+                              comment.column
+                                ? ` · ${comment.column} row ${comment.row_index + 1}`
+                                : ' · sheet'}
+                            </Typography>
+                            <Typography variant="body2">{comment.text}</Typography>
+                          </Paper>
+                        ))}
+                      </Stack>
+                    </Stack>
+                  </Box>
+                </Stack>
+              </Paper>
+            </Stack>
+
+            <Paper sx={{ p: 2 }}>
+              <Stack spacing={3}>
+                <Stack
+                  direction={{ xs: 'column', md: 'row' }}
+                  spacing={2}
+                  alignItems={{ xs: 'stretch', md: 'center' }}
+                >
+                  <Typography variant="h6" sx={{ minWidth: 96 }}>
+                    Charts
+                  </Typography>
+                  <TextField
+                    size="small"
+                    label="Name"
+                    value={chartDraft.name}
+                    onChange={(event) =>
+                      setChartDraft((current) => ({
+                        ...current,
+                        name: event.target.value,
+                      }))
+                    }
+                    sx={{ minWidth: 180 }}
+                  />
+                  <FormControl size="small" sx={{ minWidth: 140 }}>
+                    <InputLabel id="chart-type-label">Type</InputLabel>
+                    <Select
+                      labelId="chart-type-label"
+                      label="Type"
+                      value={chartDraft.chart_type}
+                      onChange={(event) =>
+                        setChartDraft((current) => ({
+                          ...current,
+                          chart_type: event.target.value as ChartCreate['chart_type'],
+                        }))
+                      }
+                    >
+                      {chartTypes.map((type) => (
+                        <MenuItem key={type} value={type}>
+                          {type}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  <FormControl size="small" sx={{ minWidth: 160 }}>
+                    <InputLabel id="chart-x-label">X field</InputLabel>
+                    <Select
+                      labelId="chart-x-label"
+                      label="X field"
+                      value={String(chartDraft.config.x_axis || '')}
+                      onChange={(event) =>
+                        setChartDraft((current) => ({
+                          ...current,
+                          config: {
+                            ...current.config,
+                            x_axis: event.target.value,
+                            labels: event.target.value,
+                          },
+                        }))
+                      }
+                    >
+                      {schemaColumns.map((column) => (
+                        <MenuItem key={column.name} value={column.name}>
+                          {column.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  <FormControl size="small" sx={{ minWidth: 160 }}>
+                    <InputLabel id="chart-y-label">Y field</InputLabel>
+                    <Select
+                      labelId="chart-y-label"
+                      label="Y field"
+                      value={String(chartDraft.config.y_axis || '')}
+                      onChange={(event) =>
+                        setChartDraft((current) => ({
+                          ...current,
+                          config: {
+                            ...current.config,
+                            y_axis: event.target.value,
+                            values: event.target.value,
+                          },
+                        }))
+                      }
+                    >
+                      {numericColumns.map((column) => (
+                        <MenuItem key={column.name} value={column.name}>
+                          {column.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  <Button
+                    variant="contained"
+                    startIcon={<Save />}
+                    onClick={saveChart}
+                    disabled={!numericColumns.length || createChartMutation.isPending}
+                  >
+                    {createChartMutation.isPending ? 'Saving...' : 'Save Chart'}
+                  </Button>
+                </Stack>
+
+                <Stack direction={{ xs: 'column', lg: 'row' }} spacing={3}>
+                  {previewChart && rows.length > 0 && (
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="subtitle2" gutterBottom>
+                        Preview
+                      </Typography>
+                      <Box sx={{ height: 280 }}>
+                        <ChartPreview chart={previewChart} rows={rows} />
+                      </Box>
+                    </Box>
+                  )}
+
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography variant="subtitle2" gutterBottom>
+                      Saved
+                    </Typography>
+                    {charts.length ? (
+                      <Stack spacing={2}>
+                        {charts.map((chart) => (
+                          <SavedChartCard key={chart.id} chart={chart} rows={rows} />
+                        ))}
+                      </Stack>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        No saved charts
+                      </Typography>
+                    )}
+                  </Box>
+                </Stack>
+              </Stack>
+            </Paper>
+          </Stack>
+        )}
       </Container>
     </Box>
   );

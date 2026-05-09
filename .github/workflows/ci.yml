@@ -1,0 +1,110 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  backend:
+    name: Backend tests and migration smoke
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: sqlite:///./test_sigmalite.db
+      SECRET_KEY: ci-secret-key-with-enough-entropy-for-tests
+      ENVIRONMENT: test
+      DISABLE_AUTH: "False"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install backend dependencies
+        run: |
+          uv venv
+          uv pip install -r requirements.txt
+      - name: Run backend tests
+        run: uv run python -m pytest -q
+      - name: Run fresh migration smoke
+        run: |
+          rm -f migration_smoke.db
+          DATABASE_URL=sqlite:///./migration_smoke.db uv run alembic upgrade head
+          uv run python - <<'PY'
+          import sqlite3
+
+          conn = sqlite3.connect("migration_smoke.db")
+          tables = {
+              row[0]
+              for row in conn.execute(
+                  "select name from sqlite_master where type='table'"
+              )
+          }
+          expected = {
+              "users",
+              "datasets",
+              "sheets",
+              "charts",
+              "comments",
+              "alembic_version",
+          }
+          missing = expected - tables
+          if missing:
+              raise SystemExit(f"Missing tables: {sorted(missing)}")
+          print(sorted(tables))
+          PY
+
+  frontend:
+    name: Frontend tests and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Run frontend unit tests
+        run: npm test -- --run
+      - name: Build frontend
+        run: npm run build
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+  e2e:
+    name: Playwright product loop
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install backend dependencies
+        working-directory: backend
+        run: |
+          uv venv
+          uv pip install -r requirements.txt
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run product-loop E2E
+        run: npm run test:e2e -- --project=chromium

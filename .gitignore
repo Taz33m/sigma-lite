@@ -60,6 +60,10 @@ coverage/
 *.cover
 .hypothesis/
 .pytest_cache/
+playwright-report/
+test-results/
+frontend/playwright-report/
+frontend/test-results/
 
 # Build
 *.pyc
@@ -68,3 +72,10 @@ coverage/
 .Python
 pip-log.txt
 pip-delete-this-directory.txt
+
+# Local release/verification artifacts
+backend/uploads-e2e/
+backend/migration_smoke.db
+backend/test_e2e_sigmalite.db
+backend/test_probe.db
+backend/test_sigmalite.db

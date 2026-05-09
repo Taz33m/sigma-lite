@@ -1,43 +1,12 @@
-import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
-from app.main import app
-from app.core.database import Base, get_db
-from app.core.config import settings
-
-# Create test database
-TEST_DATABASE_URL = "sqlite:///./test.db"
-engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-Base.metadata.create_all(bind=engine)
-
-
-def override_get_db():
-    try:
-        db = TestingSessionLocal()
-        yield db
-    finally:
-        db.close()
-
-
-app.dependency_overrides[get_db] = override_get_db
-
-client = TestClient(app)
-
-
-def test_register_user():
-    """Test user registration."""
+def test_register_user(client):
     response = client.post(
         "/api/auth/register",
         json={
             "email": "test@example.com",
             "username": "testuser",
             "password": "testpassword123",
-            "full_name": "Test User"
-        }
+            "full_name": "Test User",
+        },
     )
     assert response.status_code == 201
     data = response.json()
@@ -46,50 +15,39 @@ def test_register_user():
     assert "id" in data
 
 
-def test_register_duplicate_email():
-    """Test registration with duplicate email."""
-    # First registration
+def test_register_duplicate_email(client):
     client.post(
         "/api/auth/register",
         json={
             "email": "duplicate@example.com",
             "username": "user1",
-            "password": "password123"
-        }
+            "password": "password123",
+        },
     )
-    
-    # Second registration with same email
     response = client.post(
         "/api/auth/register",
         json={
             "email": "duplicate@example.com",
             "username": "user2",
-            "password": "password123"
-        }
+            "password": "password123",
+        },
     )
     assert response.status_code == 400
     assert "already registered" in response.json()["detail"]
 
 
-def test_login():
-    """Test user login."""
-    # Register user
+def test_login(client):
     client.post(
         "/api/auth/register",
         json={
             "email": "login@example.com",
             "username": "loginuser",
-            "password": "loginpass123"
-        }
+            "password": "loginpass123",
+        },
     )
-    
-    # Login
     response = client.post(
         "/api/auth/login",
-        data={
-            "username": "loginuser",
-            "password": "loginpass123"
-        }
+        data={"username": "loginuser", "password": "loginpass123"},
     )
     assert response.status_code == 200
     data = response.json()
@@ -98,32 +56,70 @@ def test_login():
     assert data["token_type"] == "bearer"
 
 
-def test_login_wrong_password():
-    """Test login with wrong password."""
-    # Register user
+def test_get_current_user_profile(client):
+    client.post(
+        "/api/auth/register",
+        json={
+            "email": "profile@example.com",
+            "username": "profileuser",
+            "password": "profilepass123",
+        },
+    )
+    login = client.post(
+        "/api/auth/login",
+        data={"username": "profileuser", "password": "profilepass123"},
+    ).json()
+
+    response = client.get(
+        "/api/auth/me",
+        headers={"Authorization": f"Bearer {login['access_token']}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["username"] == "profileuser"
+
+
+def test_refresh_token(client):
+    client.post(
+        "/api/auth/register",
+        json={
+            "email": "refresh@example.com",
+            "username": "refreshuser",
+            "password": "refreshpass123",
+        },
+    )
+    login = client.post(
+        "/api/auth/login",
+        data={"username": "refreshuser", "password": "refreshpass123"},
+    ).json()
+
+    response = client.post(
+        "/api/auth/refresh",
+        json={"token": login["refresh_token"]},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["access_token"]
+    assert body["refresh_token"]
+
+
+def test_login_wrong_password(client):
     client.post(
         "/api/auth/register",
         json={
             "email": "wrongpass@example.com",
             "username": "wrongpassuser",
-            "password": "correctpass123"
-        }
+            "password": "correctpass123",
+        },
     )
-    
-    # Login with wrong password
     response = client.post(
         "/api/auth/login",
-        data={
-            "username": "wrongpassuser",
-            "password": "wrongpassword"
-        }
+        data={"username": "wrongpassuser", "password": "wrongpassword"},
     )
     assert response.status_code == 401
 
 
-# Cleanup
-def teardown_module(module):
-    """Clean up test database."""
-    import os
-    if os.path.exists("./test.db"):
-        os.remove("./test.db")
+def test_unauthenticated_request_rejected(client):
+    response = client.get("/api/datasets")
+    assert response.status_code == 401

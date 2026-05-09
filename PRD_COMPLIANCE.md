@@ -1,200 +1,55 @@
 # PRD Compliance Report
 
-## ✅ Fully Implemented Features
+SigmaLite is past demo-only status. The core MVP loop is implemented and now
+covered by backend, frontend, build, migration, and Playwright smoke checks.
+The remaining work is beta polish: larger-data performance, richer formula
+coverage, collaborative conflict handling, and production operations.
 
-### Authentication & User Management
-- ✅ **FR-8**: JWT-based authentication
-- ✅ Secure login/register with password hashing
-- ✅ User workspaces and data isolation
-- ✅ Optional auth bypass for development (DISABLE_AUTH)
+## Current Feature Matrix
 
-### Data Management
-- ✅ **FR-1**: CSV file upload (10MB limit enforced)
-- ✅ **FR-5**: Save and load datasets, sheets, and charts
-- ✅ File validation and error handling
-- ✅ Auto-type detection for columns
-- ✅ Schema inference
+| Area | Status | Notes |
+| --- | --- | --- |
+| Authentication & users | Complete | Register/login, refresh, `/me`, JWT isolation, bcrypt hashing, optional local `DISABLE_AUTH`. |
+| Dataset upload | Complete | CSV upload, file size limit, safe display filename, unique stored filename, schema inference. |
+| Data grid | Beta | Paginated MUI grid, editable cells, CSV persistence, comment markers. Server-side sorting remains future work. |
+| Filtering | Beta | Backend validation plus frontend visual filter builder with saved view config. |
+| Aggregation/formulas | Beta | Column formulas and A1/whole-column aggregate formulas: `SUM`, `AVG`, `MIN`, `MAX`, `COUNT`, `MEDIAN`. Complex spreadsheet formulas are out of scope. |
+| Charts | Beta | Bar/line/scatter/pie chart builder, saved charts, PNG export. Drag-and-drop builder is future work. |
+| Export | Beta | Current-page CSV export with spreadsheet-formula injection neutralization. Full workbook/PDF export remains future work. |
+| Collaboration | Beta | WebSocket presence/cursor events, persisted sheet/cell comments, realtime comment broadcast. Multi-user edit conflict resolution is last-write-wins. |
+| Persistence | Complete for MVP | Users, datasets, sheets, charts, comments with Alembic migrations. SQLite local/test; Postgres production target. |
+| Security hardening | Beta | Production config guards, CORS allow-list, JWT auth, route validation, basic in-process rate limits. Needs external WAF/monitoring for production. |
+| QA | Beta | 60 backend tests including 10k-row smoke, 10 frontend unit tests, production build, Playwright product-loop smoke. |
 
-### Backend API
-- ✅ **FR-9**: RESTful API with `/filter`, `/aggregate` endpoints
-- ✅ CRUD operations for datasets, sheets, and charts
-- ✅ Pagination support
-- ✅ Data validation with Pydantic
-- ✅ Comprehensive API documentation (Swagger/ReDoc)
+## Implemented PRD Requirements
 
-### Real-Time Collaboration Infrastructure
-- ✅ **FR-6**: WebSocket manager implemented
-- ✅ Multi-user connection handling
-- ✅ Message broadcasting system
-- ✅ User presence tracking
+- **FR-1 Data Upload:** CSV upload, schema inference, validation, storage.
+- **FR-2 Data Grid:** Display, pagination, editable cells, persisted updates.
+- **FR-3 Filtering:** Backend filter API and visual filter UI.
+- **FR-4 Visualization:** Chart API, chart builder UI, chart rendering, PNG export.
+- **FR-5 Persistence:** Saved datasets, sheets, chart configs, comments.
+- **FR-6 Realtime Infrastructure:** WebSocket collaboration endpoint and presence.
+- **FR-7 Collaboration UI:** Active user count, cursor activity, anchored comments.
+- **FR-8 Authentication:** JWT access/refresh auth and user isolation.
+- **FR-9 REST API:** Dataset, sheet, chart, auth, comments, filtering, aggregation.
+- **FR-10 Export:** CSV export and chart image export.
 
-### Database & Persistence
-- ✅ SQLite for easy local development
-- ✅ PostgreSQL support (configurable)
-- ✅ Database migrations with Alembic
-- ✅ Relational data model (users, datasets, sheets, charts)
+## Known Beta Limits
 
-### Security
-- ✅ Input sanitization
-- ✅ JWT token validation
-- ✅ Password hashing with bcrypt
-- ✅ CORS configuration
-- ✅ SQL injection prevention via ORM
+- Cell edits are last-write-wins; there is no operational transform or merge UI.
+- CSV files are still the backing store for dataset rows. This is acceptable for
+  small/beta datasets but should be revisited after measured performance limits.
+- Formula support is aggregate-focused, not a full spreadsheet calculation engine.
+- CSV export covers current grid rows, not a full multi-sheet workbook.
+- Rate limiting is single-process and should be paired with production platform
+  protections.
+- WebSocket collaboration is functional but not a full sharing/permissions system.
 
-## ⚠️ Partially Implemented Features
+## Readiness Summary
 
-### Data Grid Display
-- ✅ **FR-2**: Basic table rendering
-- ⚠️ Not editable cells (read-only)
-- ⚠️ No column sorting in UI
-- ⚠️ No formula support
-
-### Data Visualization
-- ✅ **FR-4**: Backend chart storage
-- ⚠️ No chart rendering UI
-- ⚠️ No drag-and-drop chart builder
-- ⚠️ Chart.js not integrated in frontend
-
-### Filtering
-- ✅ **FR-3**: Backend filter API
-- ⚠️ No UI for applying filters
-- ⚠️ No visual filter builder
-
-## ❌ Not Implemented Features
-
-### Export Functionality
-- ❌ **FR-10**: No CSV export
-- ❌ No chart image/PDF export
-
-### Collaboration UI
-- ❌ **FR-7**: No commenting system UI
-- ❌ No live cursors display
-- ❌ No view-only sharing UI
-- ✅ WebSocket infrastructure ready
-
-### Advanced Spreadsheet Features
-- ❌ Formula support (SUM, AVG, etc.)
-- ❌ Cell editing
-- ❌ Column sorting in UI
-- ❌ Data virtualization for large datasets
-
-## 🔄 Migration to Material-UI
-
-### Status: In Progress
-
-**Completed:**
-- ✅ Removed Tailwind CSS dependencies
-- ✅ Added Material-UI v5 packages
-- ✅ Added MUI X Data Grid
-- ✅ Updated package.json
-- ✅ Removed Tailwind config files
-
-**Next Steps:**
-1. Rebuild LoginPage with MUI components
-2. Rebuild RegisterPage with MUI components
-3. Rebuild DashboardPage with MUI components
-4. Implement DatasetPage with MUI X Data Grid
-5. Add Chart.js integration with MUI layout
-6. Implement chart builder UI
-7. Add export functionality
-8. Implement collaboration UI features
-
-## 📊 Feature Completion Summary
-
-| Category | Completion | Notes |
-|----------|-----------|-------|
-| **Backend API** | 95% | All core endpoints implemented |
-| **Authentication** | 100% | Fully functional with bypass option |
-| **Data Upload** | 100% | CSV upload working perfectly |
-| **Data Storage** | 100% | Database models complete |
-| **WebSocket** | 80% | Infrastructure ready, needs UI |
-| **Frontend UI** | 30% | Basic pages, needs MUI rebuild |
-| **Data Grid** | 20% | Display only, needs editing |
-| **Visualization** | 10% | Backend ready, no UI |
-| **Collaboration** | 40% | Backend ready, no UI |
-| **Export** | 0% | Not implemented |
-
-## 🎯 Priority Roadmap
-
-### High Priority (Core PRD Requirements)
-1. **Editable Data Grid** - MUI X Data Grid with cell editing
-2. **Chart Visualization** - Chart.js integration with MUI
-3. **Filter UI** - Visual filter builder
-4. **Column Sorting** - Interactive sorting in grid
-
-### Medium Priority
-5. **Chart Builder** - Drag-and-drop interface
-6. **Export** - CSV and chart image export
-7. **Collaboration UI** - Live cursors and comments
-8. **Formula Support** - Basic spreadsheet formulas
-
-### Low Priority
-9. **Advanced Formulas** - Complex calculations
-10. **Data Virtualization** - For very large datasets
-11. **Rate Limiting** - API throttling
-12. **Redis Caching** - Performance optimization
-
-## 💡 Recommendations
-
-### Immediate Actions
-1. Complete Material-UI migration for all pages
-2. Implement MUI X Data Grid with editing capabilities
-3. Add Chart.js with responsive MUI containers
-4. Build visual filter UI with MUI components
-
-### Architecture Improvements
-- Add Redux/Context for complex state (optional)
-- Implement proper error boundaries
-- Add loading states and skeletons
-- Improve TypeScript type coverage
-
-### Testing
-- Add unit tests for components
-- Add integration tests for API
-- Add E2E tests with Playwright
-- Achieve 80% code coverage target
-
-## 📈 Success Metrics Status
-
-| Metric | Target | Status |
-|--------|--------|--------|
-| Dataset load time | < 2s for 10K rows | ✅ Achievable |
-| Chart render time | < 500ms | ⚠️ Not tested |
-| Security | No vulnerabilities | ✅ Good practices |
-| Test coverage | > 80% | ❌ Tests needed |
-| Usability | > 8/10 rating | ⚠️ Needs UI polish |
-
-## 🚀 Deployment Readiness
-
-### Ready for Deployment
-- ✅ Backend API fully functional
-- ✅ Database migrations working
-- ✅ Authentication system complete
-- ✅ Environment configuration
-- ✅ Git repository with documentation
-
-### Needs Work Before Production
-- ⚠️ Complete frontend UI with Material-UI
-- ⚠️ Add comprehensive error handling
-- ⚠️ Implement monitoring and logging
-- ⚠️ Add rate limiting
-- ⚠️ Security audit
-- ⚠️ Performance testing
-
-## 📝 Conclusion
-
-**Overall PRD Compliance: ~60%**
-
-The project has a **solid foundation** with:
-- Complete backend infrastructure
-- Working authentication
-- Data management capabilities
-- Real-time collaboration infrastructure
-
-**Key Gaps:**
-- Frontend UI needs Material-UI rebuild
-- Visualization features need implementation
-- Collaboration UI needs development
-- Export functionality missing
-
-**Recommendation:** Focus on completing the Material-UI migration and implementing the core visualization features to reach 85-90% PRD compliance.
+| Readiness Dimension | Status |
+| --- | --- |
+| MVP demo | Cleared |
+| Internal beta | Ready after deployment env verification |
+| Public beta | Needs monitoring, production WAF/rate limits, load testing, and backup/restore runbook |
+| Enterprise/production | Needs advanced permissions, audit logs, stronger collaboration semantics, and larger-data storage strategy |

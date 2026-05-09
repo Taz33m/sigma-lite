@@ -67,6 +67,18 @@ export interface DatasetData {
   total_pages: number;
 }
 
+export interface CellUpdateRequest {
+  row_index: number;
+  column: string;
+  value: any;
+}
+
+export interface CellUpdateResult {
+  row_index: number;
+  column: string;
+  value: any;
+}
+
 export interface FilterRequest {
   column: string;
   operator: 'eq' | 'ne' | 'gt' | 'lt' | 'gte' | 'lte' | 'contains' | 'startswith' | 'endswith';
@@ -107,6 +119,24 @@ export interface SheetCreate {
   description?: string;
   dataset_id: number;
   config?: Record<string, any>;
+}
+
+export interface CommentCreate {
+  text: string;
+  row_index?: number | null;
+  column?: string | null;
+}
+
+export interface SheetComment {
+  id: number;
+  sheet_id: number;
+  owner_id: number;
+  username: string;
+  text: string;
+  row_index?: number | null;
+  column?: string | null;
+  created_at: string;
+  updated_at?: string;
 }
 
 export interface Chart {

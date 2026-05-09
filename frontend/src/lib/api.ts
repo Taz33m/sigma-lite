@@ -1,4 +1,5 @@
-import axios from 'axios';
+import axios, { type InternalAxiosRequestConfig } from 'axios';
+import { useAuthStore } from '@/store/authStore';
 import type {
   LoginCredentials,
   RegisterData,
@@ -9,8 +10,12 @@ import type {
   FilterQuery,
   AggregateRequest,
   AggregateResult,
+  CellUpdateRequest,
+  CellUpdateResult,
+  CommentCreate,
   Sheet,
   SheetCreate,
+  SheetComment,
   Chart,
   ChartCreate,
 } from '@/types';
@@ -24,15 +29,17 @@ const api = axios.create({
   },
 });
 
+export function attachAuthToken(config: InternalAxiosRequestConfig): InternalAxiosRequestConfig {
+  const token = localStorage.getItem('access_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+}
+
 // Request interceptor to add auth token
 api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('access_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
+  attachAuthToken,
   (error) => Promise.reject(error)
 );
 
@@ -60,8 +67,7 @@ api.interceptors.response.use(
           return api(originalRequest);
         }
       } catch (refreshError) {
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
+        useAuthStore.getState().logout();
         window.location.href = '/login';
         return Promise.reject(refreshError);
       }
@@ -91,9 +97,13 @@ export const authAPI = {
     return response.data;
   },
 
+  me: async (): Promise<User> => {
+    const response = await api.get('/api/auth/me');
+    return response.data;
+  },
+
   logout: () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
+    useAuthStore.getState().logout();
   },
 };
 
@@ -142,6 +152,14 @@ export const datasetAPI = {
     return response.data;
   },
 
+  updateCell: async (
+    id: number,
+    request: CellUpdateRequest
+  ): Promise<CellUpdateResult> => {
+    const response = await api.patch(`/api/datasets/${id}/cell`, request);
+    return response.data;
+  },
+
   update: async (id: number, data: Partial<Dataset>): Promise<Dataset> => {
     const response = await api.put(`/api/datasets/${id}`, data);
     return response.data;
@@ -178,6 +196,19 @@ export const sheetAPI = {
 
   delete: async (id: number): Promise<void> => {
     await api.delete(`/api/sheets/${id}`);
+  },
+
+  listComments: async (id: number): Promise<SheetComment[]> => {
+    const response = await api.get(`/api/sheets/${id}/comments`);
+    return response.data;
+  },
+
+  createComment: async (
+    id: number,
+    data: CommentCreate
+  ): Promise<SheetComment> => {
+    const response = await api.post(`/api/sheets/${id}/comments`, data);
+    return response.data;
   },
 };
 
