@@ -213,18 +213,18 @@ auth, weak secrets, and wildcard CORS.
 
 ```text
 .
-├── backend/                 FastAPI app, Alembic migrations, pytest suite
-├── frontend/                React/Vite app, Vitest tests, Playwright E2E
-├── docs/                    Architecture, development, roadmap, PRD docs
-├── .github/workflows/       CI
-├── .github/ISSUE_TEMPLATE/  Issue forms
-├── CONTRIBUTING.md          Contributor workflow
-├── SECURITY.md              Vulnerability reporting policy
-├── CODE_OF_CONDUCT.md       Community expectations
-├── SUPPORT.md               Support expectations
-├── GOVERNANCE.md            Maintainer and release model
-├── CHANGELOG.md             Release history
-└── LICENSE                  MIT license
+|-- backend/                 FastAPI app, Alembic migrations, pytest suite
+|-- frontend/                React/Vite app, Vitest tests, Playwright E2E
+|-- docs/                    Architecture, development, roadmap, PRD docs
+|-- .github/workflows/       CI
+|-- .github/ISSUE_TEMPLATE/  Issue forms
+|-- CONTRIBUTING.md          Contributor workflow
+|-- SECURITY.md              Vulnerability reporting policy
+|-- CODE_OF_CONDUCT.md       Community expectations
+|-- SUPPORT.md               Support expectations
+|-- GOVERNANCE.md            Maintainer and release model
+|-- CHANGELOG.md             Release history
+`-- LICENSE                  MIT license
 ```
 
 ## Production Notes
