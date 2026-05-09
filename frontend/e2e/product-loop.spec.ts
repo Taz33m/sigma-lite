@@ -1,9 +1,4 @@
 import { expect, test } from '@playwright/test';
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const e2eDir = path.dirname(fileURLToPath(import.meta.url));
 
 test('core product loop: auth, upload, sheet, edit, filter, chart, comment, export', async ({
   page,
@@ -55,7 +50,6 @@ test('core product loop: auth, upload, sheet, edit, filter, chart, comment, expo
   await page.goto('/');
 
   await expect(page.getByRole('heading', { name: /my datasets/i })).toBeVisible();
-  const csvPath = path.resolve(e2eDir, 'fixtures/people.csv');
   const upload = await request.post('http://127.0.0.1:8001/api/datasets', {
     headers: { Authorization: `Bearer ${tokens.access_token}` },
     multipart: {
@@ -64,7 +58,7 @@ test('core product loop: auth, upload, sheet, edit, filter, chart, comment, expo
       file: {
         name: 'people.csv',
         mimeType: 'text/csv',
-        buffer: fs.readFileSync(csvPath),
+        buffer: Buffer.from('name,age,city\nAlice,30,NYC\nBob,25,LA\nCarol,40,SF\n'),
       },
     },
   });
