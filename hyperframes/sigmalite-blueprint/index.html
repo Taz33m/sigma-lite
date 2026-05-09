@@ -1,0 +1,958 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #102a43;
+      }
+
+      body {
+        color: #f4f7fb;
+        font-family: "IBM Plex Mono", "Courier New", monospace;
+      }
+
+      #root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #102a43;
+        isolation: isolate;
+      }
+
+      .blueprint-field,
+      .blueprint-grid,
+      .grain,
+      .coordinate-frame,
+      .scene,
+      .transition,
+      .iris {
+        position: absolute;
+        inset: 0;
+      }
+
+      .blueprint-field {
+        background:
+          radial-gradient(circle at 18% 22%, rgba(103, 213, 255, 0.18), rgba(103, 213, 255, 0) 24%),
+          radial-gradient(circle at 82% 72%, rgba(30, 136, 229, 0.18), rgba(30, 136, 229, 0) 28%),
+          linear-gradient(135deg, #102a43 0%, #071923 100%);
+        z-index: 0;
+      }
+
+      .blueprint-grid {
+        width: 2100px;
+        height: 1260px;
+        left: -90px;
+        top: -90px;
+        background-image:
+          linear-gradient(rgba(103, 213, 255, 0.16) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(103, 213, 255, 0.16) 1px, transparent 1px),
+          linear-gradient(rgba(103, 213, 255, 0.07) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(103, 213, 255, 0.07) 1px, transparent 1px);
+        background-size: 120px 120px, 120px 120px, 24px 24px, 24px 24px;
+        opacity: 0.8;
+        transform-origin: center;
+        z-index: 1;
+      }
+
+      .grain {
+        background-image:
+          repeating-linear-gradient(0deg, rgba(244, 247, 251, 0.025) 0 1px, transparent 1px 4px),
+          repeating-linear-gradient(90deg, rgba(7, 25, 35, 0.05) 0 1px, transparent 1px 9px);
+        mix-blend-mode: overlay;
+        opacity: 0.45;
+        z-index: 2;
+      }
+
+      .coordinate-frame {
+        border: 1px solid rgba(103, 213, 255, 0.18);
+        margin: 44px;
+        z-index: 3;
+      }
+
+      .coordinate-frame::before,
+      .coordinate-frame::after {
+        content: "";
+        position: absolute;
+        background: rgba(103, 213, 255, 0.55);
+      }
+
+      .coordinate-frame::before {
+        width: 140px;
+        height: 1px;
+        left: 28px;
+        top: 28px;
+        box-shadow: 0 950px 0 rgba(103, 213, 255, 0.45), 1650px 0 0 rgba(103, 213, 255, 0.45);
+      }
+
+      .coordinate-frame::after {
+        width: 1px;
+        height: 140px;
+        left: 28px;
+        top: 28px;
+        box-shadow: 1782px 0 0 rgba(103, 213, 255, 0.45), 0 760px 0 rgba(103, 213, 255, 0.35);
+      }
+
+      .scene {
+        z-index: 10;
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        height: 100%;
+        padding: 86px 112px;
+        gap: 34px;
+        opacity: 0;
+        visibility: hidden;
+      }
+
+      .scene-inner {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        display: grid;
+        grid-template-columns: repeat(12, 1fr);
+        grid-template-rows: repeat(8, 1fr);
+        column-gap: 28px;
+        row-gap: 24px;
+      }
+
+      .display {
+        font-family: "IBM Plex Sans Condensed", sans-serif;
+        font-weight: 900;
+        letter-spacing: -0.02em;
+        text-transform: uppercase;
+        line-height: 0.92;
+      }
+
+      .mono,
+      .label,
+      .cell,
+      .metric,
+      .formula {
+        font-family: "IBM Plex Mono", "Courier New", monospace;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .label {
+        color: #67d5ff;
+        font-size: 18px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .micro {
+        color: rgba(244, 247, 251, 0.74);
+        font-size: 18px;
+        line-height: 1.45;
+      }
+
+      .paper {
+        background: rgba(244, 247, 251, 0.94);
+        color: #071923;
+        border: 1px solid rgba(103, 213, 255, 0.75);
+        box-shadow:
+          0 38px 100px rgba(0, 0, 0, 0.22),
+          inset 0 0 0 1px rgba(7, 25, 35, 0.08);
+      }
+
+      .stamp {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 2px solid currentColor;
+        color: #f6c945;
+        padding: 8px 15px;
+        font-size: 17px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+
+      .transition {
+        z-index: 80;
+        pointer-events: none;
+      }
+
+      .sheet-wipe {
+        position: absolute;
+        inset: 0;
+        background:
+          linear-gradient(90deg, rgba(244, 247, 251, 0) 0%, rgba(244, 247, 251, 0.96) 16%, rgba(244, 247, 251, 0.98) 84%, rgba(244, 247, 251, 0) 100%);
+        box-shadow: 0 0 80px rgba(103, 213, 255, 0.22);
+      }
+
+      .plotter-wipe {
+        position: absolute;
+        left: 0;
+        top: 50%;
+        width: 100%;
+        height: 6px;
+        background: #67d5ff;
+        transform-origin: left center;
+        box-shadow: 0 0 38px rgba(103, 213, 255, 0.7);
+      }
+
+      .iris {
+        z-index: 90;
+        background: #f4f7fb;
+        clip-path: circle(0% at 50% 50%);
+        opacity: 0.96;
+        pointer-events: none;
+      }
+
+      .csv-row {
+        height: 46px;
+        border: 1px solid rgba(103, 213, 255, 0.28);
+        color: rgba(244, 247, 251, 0.86);
+        display: grid;
+        grid-template-columns: 1fr 0.6fr 0.7fr 0.7fr;
+        align-items: center;
+        padding: 0 18px;
+        font-size: 18px;
+        background: rgba(7, 25, 35, 0.44);
+      }
+
+      #scene-open .headline {
+        grid-column: 1 / span 7;
+        grid-row: 2 / span 3;
+        font-size: 118px;
+        color: #f4f7fb;
+      }
+
+      #scene-open .tag {
+        grid-column: 1 / span 4;
+        grid-row: 1;
+        align-self: end;
+      }
+
+      #scene-open .rows {
+        grid-column: 8 / span 5;
+        grid-row: 2 / span 5;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        transform: rotate(-1.2deg);
+      }
+
+      #scene-open .draft-mark {
+        grid-column: 2 / span 5;
+        grid-row: 6 / span 2;
+        border-top: 2px solid rgba(103, 213, 255, 0.8);
+        border-left: 2px solid rgba(103, 213, 255, 0.8);
+      }
+
+      .intake-lane {
+        grid-column: 1 / span 7;
+        grid-row: 2 / span 5;
+        border: 1px solid rgba(103, 213, 255, 0.35);
+        position: relative;
+        overflow: hidden;
+      }
+
+      .intake-lane::before {
+        content: "";
+        position: absolute;
+        left: 70px;
+        right: 70px;
+        top: 50%;
+        border-top: 3px solid #67d5ff;
+        box-shadow: 0 0 22px rgba(103, 213, 255, 0.48);
+      }
+
+      .file-block {
+        position: absolute;
+        left: 92px;
+        top: 225px;
+        width: 292px;
+        height: 152px;
+        border: 2px solid #67d5ff;
+        background: rgba(244, 247, 251, 0.92);
+        color: #071923;
+        padding: 22px;
+        box-shadow: 0 18px 70px rgba(0, 0, 0, 0.22);
+      }
+
+      .file-block .fold {
+        position: absolute;
+        right: -2px;
+        top: -2px;
+        width: 52px;
+        height: 52px;
+        background: #dce8f7;
+        clip-path: polygon(100% 0, 0 0, 100% 100%);
+        border-right: 2px solid #67d5ff;
+        border-top: 2px solid #67d5ff;
+      }
+
+      .schema-panel {
+        grid-column: 8 / span 5;
+        grid-row: 2 / span 5;
+        padding: 36px;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+
+      .schema-item {
+        display: grid;
+        grid-template-columns: 1fr 120px;
+        align-items: center;
+        padding: 16px 18px;
+        border: 1px solid rgba(7, 25, 35, 0.16);
+        background: rgba(255, 255, 255, 0.48);
+      }
+
+      .schema-type {
+        color: #1e88e5;
+        text-transform: uppercase;
+        font-size: 16px;
+        text-align: right;
+      }
+
+      .workspace-sheet {
+        grid-column: 1 / span 9;
+        grid-row: 2 / span 6;
+        display: grid;
+        grid-template-columns: 74px repeat(5, 1fr);
+        grid-template-rows: 58px repeat(6, 1fr);
+        overflow: hidden;
+      }
+
+      .cell {
+        border-right: 1px solid rgba(7, 25, 35, 0.16);
+        border-bottom: 1px solid rgba(7, 25, 35, 0.16);
+        padding: 16px 18px;
+        font-size: 19px;
+        display: flex;
+        align-items: center;
+        min-width: 0;
+      }
+
+      .header-cell {
+        color: #102a43;
+        background: rgba(30, 136, 229, 0.1);
+        font-weight: 700;
+      }
+
+      .row-head {
+        color: rgba(7, 25, 35, 0.5);
+        justify-content: center;
+      }
+
+      .selected-cell {
+        position: relative;
+        color: #071923;
+        font-weight: 700;
+      }
+
+      .selected-cell::after {
+        content: "";
+        position: absolute;
+        inset: -1px;
+        border: 4px solid #1e88e5;
+        box-shadow: 0 0 0 2px rgba(103, 213, 255, 0.55);
+      }
+
+      .selection-pulse {
+        position: absolute;
+        left: calc(74px + 3 * ((100% - 74px) / 5));
+        top: calc(58px + 2 * ((100% - 58px) / 6));
+        width: calc((100% - 74px) / 5);
+        height: calc((100% - 58px) / 6);
+        border: 4px solid #1e88e5;
+        box-shadow: 0 0 0 2px rgba(103, 213, 255, 0.55);
+        pointer-events: none;
+      }
+
+      .side-notes {
+        grid-column: 10 / span 3;
+        grid-row: 2 / span 6;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+
+      .note-card {
+        padding: 22px;
+        border: 1px solid rgba(103, 213, 255, 0.42);
+        background: rgba(7, 25, 35, 0.5);
+      }
+
+      .formula-board {
+        grid-column: 1 / span 6;
+        grid-row: 2 / span 5;
+        padding: 42px;
+        position: relative;
+      }
+
+      .formula {
+        font-size: 54px;
+        color: #102a43;
+      }
+
+      .result {
+        margin-top: 48px;
+        font-size: 118px;
+        color: #1e88e5;
+        line-height: 0.95;
+      }
+
+      .dimension {
+        margin-top: 30px;
+        height: 38px;
+        border-left: 2px solid #f6c945;
+        border-right: 2px solid #f6c945;
+        border-top: 2px solid #f6c945;
+        transform-origin: left center;
+      }
+
+      .filter-board {
+        grid-column: 8 / span 5;
+        grid-row: 2 / span 5;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        padding: 28px;
+      }
+
+      .filter-row {
+        display: grid;
+        grid-template-columns: 1fr 0.6fr 0.8fr;
+        gap: 14px;
+        align-items: center;
+        padding: 14px 18px;
+        border: 1px solid rgba(103, 213, 255, 0.25);
+        background: rgba(7, 25, 35, 0.36);
+      }
+
+      .filter-row.dim {
+        opacity: 0.28;
+      }
+
+      .bracket {
+        position: absolute;
+        top: 275px;
+        width: 56px;
+        height: 230px;
+        border-top: 4px solid #67d5ff;
+        border-bottom: 4px solid #67d5ff;
+      }
+
+      .bracket.left {
+        left: 930px;
+        border-left: 4px solid #67d5ff;
+      }
+
+      .bracket.right {
+        right: 146px;
+        border-right: 4px solid #67d5ff;
+      }
+
+      .chart-panel {
+        grid-column: 1 / span 8;
+        grid-row: 2 / span 6;
+        padding: 44px;
+        position: relative;
+      }
+
+      .bars {
+        position: absolute;
+        left: 96px;
+        right: 140px;
+        bottom: 110px;
+        height: 360px;
+        display: flex;
+        gap: 42px;
+        align-items: flex-end;
+      }
+
+      .bar {
+        width: 74px;
+        background: linear-gradient(180deg, #67d5ff, #1e88e5);
+        transform-origin: bottom center;
+        box-shadow: 0 0 28px rgba(103, 213, 255, 0.2);
+      }
+
+      .chart-svg {
+        position: absolute;
+        left: 74px;
+        bottom: 92px;
+        width: 790px;
+        height: 430px;
+        overflow: visible;
+      }
+
+      .export-stamp {
+        grid-column: 10 / span 3;
+        grid-row: 4;
+        align-self: center;
+        justify-self: center;
+        color: #22c55e;
+      }
+
+      .collab-sheet {
+        grid-column: 1 / span 8;
+        grid-row: 2 / span 6;
+        position: relative;
+        padding: 36px;
+      }
+
+      .mini-grid {
+        width: 100%;
+        height: 100%;
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        grid-template-rows: repeat(6, 1fr);
+      }
+
+      .mini-grid div {
+        border: 1px solid rgba(7, 25, 35, 0.12);
+      }
+
+      .cursor-label {
+        position: absolute;
+        padding: 10px 14px;
+        background: #1e88e5;
+        color: #f4f7fb;
+        font-size: 17px;
+      }
+
+      .cursor-label.red {
+        background: #e23d3d;
+      }
+
+      .comment-card {
+        grid-column: 9 / span 4;
+        grid-row: 3 / span 3;
+        padding: 30px;
+        border: 2px solid #e23d3d;
+        color: #071923;
+        transform-origin: left center;
+      }
+
+      .redline {
+        position: absolute;
+        left: 420px;
+        top: 315px;
+        width: 240px;
+        height: 120px;
+        overflow: visible;
+      }
+
+      .architecture {
+        grid-column: 1 / span 12;
+        grid-row: 2 / span 6;
+        position: relative;
+        border: 1px solid rgba(103, 213, 255, 0.35);
+      }
+
+      .node {
+        position: absolute;
+        width: 260px;
+        height: 96px;
+        border: 2px solid #67d5ff;
+        background: rgba(7, 25, 35, 0.78);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        font-size: 24px;
+        color: #f4f7fb;
+        box-shadow: inset 0 0 0 1px rgba(244, 247, 251, 0.08);
+      }
+
+      .node.paper-node {
+        background: rgba(7, 25, 35, 0.88);
+        color: #f4f7fb;
+      }
+
+      .node small {
+        display: block;
+        margin-top: 7px;
+        color: #67d5ff;
+        font-size: 14px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .node.paper-node small {
+        color: #67d5ff;
+      }
+
+      .arch-lines {
+        position: absolute;
+        inset: 0;
+        overflow: visible;
+      }
+
+      .check-stamp {
+        position: absolute;
+        right: 62px;
+        bottom: 48px;
+        color: #22c55e;
+      }
+
+      #scene-close {
+        justify-content: center;
+      }
+
+      #scene-close .scene-inner {
+        grid-template-rows: repeat(8, 1fr);
+      }
+
+      .close-title {
+        grid-column: 2 / span 10;
+        grid-row: 3 / span 2;
+        font-size: 156px;
+        align-self: center;
+      }
+
+      .close-sub {
+        grid-column: 3 / span 8;
+        grid-row: 5;
+        font-size: 34px;
+        color: rgba(244, 247, 251, 0.84);
+        align-self: start;
+        text-align: center;
+      }
+
+      .measure-rule {
+        grid-column: 3 / span 8;
+        grid-row: 6;
+        height: 12px;
+        align-self: start;
+        background: #67d5ff;
+        transform-origin: left center;
+        box-shadow: 0 0 42px rgba(103, 213, 255, 0.5);
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="55"
+      data-width="1920"
+      data-height="1080"
+    >
+      <audio
+        id="blueprint-audio"
+        data-start="0"
+        data-duration="55"
+        data-track-index="0"
+        src="assets/blueprint-pulse.wav"
+        data-volume="0.42"
+      ></audio>
+
+      <div class="blueprint-field"></div>
+      <div class="blueprint-grid" data-layout-ignore></div>
+      <div class="grain" data-layout-ignore></div>
+      <div class="coordinate-frame" data-layout-ignore></div>
+
+      <section id="scene-open" class="scene">
+        <div class="scene-inner">
+          <div class="label tag">SIGMALITE / RAW MATERIAL</div>
+          <h1 class="display headline">A CSV is not a workspace.</h1>
+          <div class="draft-mark" data-layout-ignore></div>
+          <div class="rows">
+            <div class="csv-row"><span>name</span><span>team</span><span>city</span><span>salary</span></div>
+            <div class="csv-row"><span>Alice</span><span>Ops</span><span>NYC</span><span>75000</span></div>
+            <div class="csv-row"><span>Bob</span><span>Eng</span><span>SF</span><span>95000</span></div>
+            <div class="csv-row"><span>Diana</span><span>Mkt</span><span>BOS</span><span>82000</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-upload" class="scene">
+        <div class="scene-inner">
+          <div class="label" style="grid-column: 1 / span 4; grid-row: 1; align-self: end">01 / CSV upload</div>
+          <div class="intake-lane">
+            <div class="file-block">
+              <div class="fold"></div>
+              <div class="label" style="color:#0d47a1">CSV</div>
+              <div class="mono" style="font-size:24px;margin-top:16px">sample_data.csv</div>
+              <div class="mono" style="font-size:16px;margin-top:18px;color:rgba(7,25,35,.55)">safe filename</div>
+            </div>
+          </div>
+          <div class="schema-panel paper">
+            <div class="label" style="color:#0d47a1">schema inferred</div>
+            <div class="schema-item"><span>department</span><span class="schema-type">text</span></div>
+            <div class="schema-item"><span>salary</span><span class="schema-type">number</span></div>
+            <div class="schema-item"><span>created_at</span><span class="schema-type">date</span></div>
+            <div class="schema-item"><span>rows</span><span class="schema-type">paginated</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-grid" class="scene">
+        <div class="scene-inner">
+          <div class="label" style="grid-column: 1 / span 5; grid-row: 1; align-self: end">02 / editable workspace</div>
+          <div class="workspace-sheet paper">
+            <div class="cell header-cell"></div>
+            <div class="cell header-cell">A name</div>
+            <div class="cell header-cell">B dept</div>
+            <div class="cell header-cell">C city</div>
+            <div class="cell header-cell">D salary</div>
+            <div class="cell header-cell">E status</div>
+            <div class="cell row-head">1</div><div class="cell">Alice</div><div class="cell">Ops</div><div class="cell">NYC</div><div class="cell">75000</div><div class="cell">clean</div>
+            <div class="cell row-head">2</div><div class="cell">Bob</div><div class="cell">Eng</div><div class="cell">SF</div><div class="cell selected-cell">95000</div><div class="cell">review</div>
+            <div class="cell row-head">3</div><div class="cell">Diana</div><div class="cell">Mkt</div><div class="cell">BOS</div><div class="cell">82000</div><div class="cell">clean</div>
+            <div class="cell row-head">4</div><div class="cell">Mina</div><div class="cell">Ops</div><div class="cell">SEA</div><div class="cell">88000</div><div class="cell">clean</div>
+            <div class="cell row-head">5</div><div class="cell">Ravi</div><div class="cell">Fin</div><div class="cell">CHI</div><div class="cell">91000</div><div class="cell">flag</div>
+            <div class="cell row-head">6</div><div class="cell">Noor</div><div class="cell">Eng</div><div class="cell">ATX</div><div class="cell">99000</div><div class="cell">clean</div>
+            <div class="selection-pulse" data-layout-ignore></div>
+          </div>
+          <div class="side-notes">
+            <div class="note-card"><div class="label">persisted cell updates</div><p class="micro">Edits write back through the API and refresh dataset metadata.</p></div>
+            <div class="note-card"><div class="label">comment markers</div><p class="micro">Cells can carry team context without leaving the sheet.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-formula" class="scene">
+        <div class="scene-inner">
+          <div class="label" style="grid-column: 1 / span 5; grid-row: 1; align-self: end">03 / formula + filter</div>
+          <div class="formula-board paper">
+            <div class="formula">=AVG(B:B)</div>
+            <div class="result">$82,430</div>
+            <div class="dimension"></div>
+            <div class="label" style="color:#102a43;margin-top:16px">aggregate formula</div>
+          </div>
+          <div class="filter-board">
+            <div class="label">FILTER: department = ops</div>
+            <div class="filter-row"><span>Alice</span><span>Ops</span><span>75000</span></div>
+            <div class="filter-row dim"><span>Bob</span><span>Eng</span><span>95000</span></div>
+            <div class="filter-row"><span>Mina</span><span>Ops</span><span>88000</span></div>
+            <div class="filter-row dim"><span>Ravi</span><span>Fin</span><span>91000</span></div>
+          </div>
+          <div class="bracket left" data-layout-ignore></div>
+          <div class="bracket right" data-layout-ignore></div>
+        </div>
+      </section>
+
+      <section id="scene-chart" class="scene">
+        <div class="scene-inner">
+          <div class="label" style="grid-column: 1 / span 5; grid-row: 1; align-self: end">04 / plotted result</div>
+          <div class="chart-panel paper">
+            <div class="label" style="color:#0d47a1">saved chart</div>
+            <div class="bars">
+              <div class="bar" style="height: 38%"></div>
+              <div class="bar" style="height: 72%"></div>
+              <div class="bar" style="height: 54%"></div>
+              <div class="bar" style="height: 86%"></div>
+              <div class="bar" style="height: 64%"></div>
+              <div class="bar" style="height: 92%"></div>
+            </div>
+            <svg class="chart-svg" viewBox="0 0 790 430" aria-hidden="true">
+              <path id="line-chart-path" d="M35 335 L172 250 L310 286 L448 160 L586 215 L728 78" fill="none" stroke="#E23D3D" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" />
+              <g id="data-dots" fill="#E23D3D">
+                <circle cx="35" cy="335" r="9" />
+                <circle cx="172" cy="250" r="9" />
+                <circle cx="310" cy="286" r="9" />
+                <circle cx="448" cy="160" r="9" />
+                <circle cx="586" cy="215" r="9" />
+                <circle cx="728" cy="78" r="9" />
+              </g>
+            </svg>
+          </div>
+          <div class="stamp export-stamp">PNG export</div>
+        </div>
+      </section>
+
+      <section id="scene-collab" class="scene">
+        <div class="scene-inner">
+          <div class="label" style="grid-column: 1 / span 5; grid-row: 1; align-self: end">05 / team markup</div>
+          <div class="collab-sheet paper">
+            <div class="mini-grid">
+              <div></div><div></div><div></div><div></div><div></div><div></div>
+              <div></div><div></div><div></div><div></div><div></div><div></div>
+              <div></div><div></div><div></div><div></div><div></div><div></div>
+              <div></div><div></div><div></div><div></div><div></div><div></div>
+              <div></div><div></div><div></div><div></div><div></div><div></div>
+              <div></div><div></div><div></div><div></div><div></div><div></div>
+            </div>
+            <svg class="redline" viewBox="0 0 240 120" aria-hidden="true">
+              <ellipse id="redline-circle" cx="118" cy="60" rx="104" ry="42" fill="none" stroke="#E23D3D" stroke-width="6" stroke-linecap="round" />
+              <path id="leader-line" d="M205 70 L320 110" fill="none" stroke="#E23D3D" stroke-width="4" stroke-linecap="round" />
+            </svg>
+            <div class="cursor-label" style="left: 250px; top: 145px">maya / presence</div>
+            <div class="cursor-label red" style="left: 680px; top: 450px">noor / cursor activity</div>
+          </div>
+          <div class="comment-card paper">
+            <div class="label" style="color:#e23d3d">comment</div>
+            <p class="micro" style="color:#071923;font-size:24px;margin-top:24px">Check the Ops filter before sharing this sheet.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-architecture" class="scene">
+        <div class="scene-inner">
+          <div class="label" style="grid-column: 1 / span 6; grid-row: 1; align-self: end">06 / engineered system</div>
+          <div class="architecture">
+            <svg class="arch-lines" viewBox="0 0 1696 690" aria-hidden="true">
+              <path class="arch-line" d="M255 185 H560 V185 H730" stroke="#67D5FF" stroke-width="4" fill="none" />
+              <path class="arch-line" d="M955 185 H1230" stroke="#67D5FF" stroke-width="4" fill="none" />
+              <path class="arch-line" d="M845 235 V395 H580" stroke="#67D5FF" stroke-width="4" fill="none" />
+              <path class="arch-line" d="M845 235 V395 H1110" stroke="#67D5FF" stroke-width="4" fill="none" />
+              <path class="arch-line" d="M1320 235 V475 H845 V565" stroke="#67D5FF" stroke-width="4" fill="none" />
+            </svg>
+            <div class="node paper-node" style="left: 60px; top: 138px">React + MUI<small>frontend</small></div>
+            <div class="node" style="left: 720px; top: 138px">FastAPI<small>api</small></div>
+            <div class="node" style="left: 1242px; top: 138px">WebSockets<small>presence</small></div>
+            <div class="node" style="left: 330px; top: 350px">pandas<small>processing</small></div>
+            <div class="node" style="left: 1096px; top: 350px">SQLAlchemy<small>persistence</small></div>
+            <div class="node paper-node" style="left: 720px; top: 558px">Alembic + CI + E2E<small>release checks</small></div>
+            <div class="stamp check-stamp">verified loop</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-close" class="scene">
+        <div class="scene-inner">
+          <h2 class="display close-title">SigmaLite</h2>
+          <div class="close-sub mono">Spreadsheet-style data exploration, engineered for teams.</div>
+          <div class="measure-rule"></div>
+        </div>
+      </section>
+
+      <div class="transition" data-layout-ignore>
+        <div class="sheet-wipe"></div>
+        <div class="plotter-wipe"></div>
+      </div>
+      <div class="iris" data-layout-ignore></div>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+
+      gsap.defaults({ ease: "power3.out" });
+      const tl = gsap.timeline({ paused: true });
+      const scenes = [
+        "#scene-open",
+        "#scene-upload",
+        "#scene-grid",
+        "#scene-formula",
+        "#scene-chart",
+        "#scene-collab",
+        "#scene-architecture",
+        "#scene-close",
+      ];
+
+      tl.set(scenes, { autoAlpha: 0 }, 0);
+      tl.set(".sheet-wipe", { xPercent: -115 }, 0);
+      tl.set(".plotter-wipe", { scaleX: 0, transformOrigin: "left center" }, 0);
+      tl.set(".iris", { clipPath: "circle(0% at 54% 52%)" }, 0);
+      tl.set("#scene-open", { autoAlpha: 1 }, 0);
+      tl.from(".blueprint-grid", { scale: 0.96, autoAlpha: 0, duration: 1.1, ease: "sine.inOut" }, 0.12);
+      tl.to(".blueprint-grid", { x: 28, y: 18, duration: 54, ease: "none" }, 0.2);
+
+      function sheetTransition(at, nextScene) {
+        tl.fromTo(".sheet-wipe", { xPercent: -115 }, { xPercent: 115, duration: 0.72, ease: "power3.inOut", overwrite: "auto" }, at);
+        tl.set(scenes, { autoAlpha: 0 }, at + 0.36);
+        tl.set(nextScene, { autoAlpha: 1 }, at + 0.36);
+        tl.set(".sheet-wipe", { xPercent: -115 }, at + 0.74);
+      }
+
+      function irisTransition(at, nextScene) {
+        tl.to(".iris", { clipPath: "circle(150% at 54% 52%)", duration: 0.42, ease: "power4.inOut", overwrite: "auto" }, at);
+        tl.set(scenes, { autoAlpha: 0 }, at + 0.25);
+        tl.set(nextScene, { autoAlpha: 1 }, at + 0.25);
+        tl.to(".iris", { clipPath: "circle(0% at 54% 52%)", duration: 0.42, ease: "power4.inOut", overwrite: "auto" }, at + 0.43);
+      }
+
+      function plotterTransition(at, nextScene) {
+        tl.to(".plotter-wipe", { scaleX: 1, duration: 0.45, ease: "expo.inOut", overwrite: "auto" }, at);
+        tl.set(scenes, { autoAlpha: 0 }, at + 0.28);
+        tl.set(nextScene, { autoAlpha: 1 }, at + 0.28);
+        tl.to(".plotter-wipe", { scaleX: 0, transformOrigin: "right center", duration: 0.45, ease: "expo.inOut", overwrite: "auto" }, at + 0.46);
+        tl.set(".plotter-wipe", { transformOrigin: "left center" }, at + 0.95);
+      }
+
+      tl.addLabel("intro", 0);
+      tl.from("#scene-open .tag", { x: -38, autoAlpha: 0, duration: 0.45, ease: "power3.out" }, 0.25);
+      tl.from("#scene-open .headline", { y: 56, autoAlpha: 0, duration: 0.76, ease: "expo.out" }, 0.48);
+      tl.from("#scene-open .csv-row", { x: 95, rotation: 1.6, autoAlpha: 0, duration: 0.5, ease: "back.out(1.2)", stagger: 0.12 }, 1.02);
+      tl.from("#scene-open .draft-mark", { scaleX: 0, scaleY: 0, transformOrigin: "top left", autoAlpha: 0, duration: 0.82, ease: "power4.out" }, 1.35);
+      sheetTransition(4.42, "#scene-upload");
+
+      tl.addLabel("upload", 5.0);
+      tl.from("#scene-upload .label", { x: -28, autoAlpha: 0, duration: 0.42, ease: "power3.out" }, 5.16);
+      tl.from(".intake-lane", { scaleX: 0.86, autoAlpha: 0, duration: 0.55, ease: "expo.out" }, 5.25);
+      tl.from(".file-block", { x: -110, y: 10, rotation: -3, autoAlpha: 0, duration: 0.7, ease: "power4.out" }, 5.55);
+      tl.to(".file-block", { x: 420, duration: 1.05, ease: "power2.inOut" }, 6.3);
+      tl.from(".schema-panel", { x: 54, autoAlpha: 0, duration: 0.56, ease: "expo.out" }, 6.78);
+      tl.from(".schema-item", { x: 36, autoAlpha: 0, duration: 0.38, ease: "back.out(1.3)", stagger: 0.11 }, 7.12);
+      sheetTransition(10.02, "#scene-grid");
+
+      tl.addLabel("grid", 10.5);
+      tl.from("#scene-grid .label", { x: -30, autoAlpha: 0, duration: 0.36, ease: "power3.out" }, 10.68);
+      tl.from(".workspace-sheet", { scale: 0.96, y: 24, autoAlpha: 0, duration: 0.72, ease: "expo.out" }, 10.88);
+      tl.from(".workspace-sheet .header-cell", { y: -24, autoAlpha: 0, duration: 0.38, ease: "power4.out", stagger: 0.035 }, 11.18);
+      tl.from(".workspace-sheet .cell:not(.header-cell)", { y: 18, autoAlpha: 0, duration: 0.26, ease: "power2.out", stagger: { amount: 0.55, from: "start" } }, 11.45);
+      tl.from(".selection-pulse", { scale: 0.88, autoAlpha: 0, duration: 0.28, ease: "back.out(1.4)" }, 12.2);
+      tl.from(".side-notes .note-card", { x: 42, autoAlpha: 0, duration: 0.46, ease: "back.out(1.2)", stagger: 0.14 }, 12.45);
+      irisTransition(16.02, "#scene-formula");
+
+      tl.addLabel("formula", 16.5);
+      tl.from("#scene-formula .label", { x: -30, autoAlpha: 0, duration: 0.36, ease: "power3.out" }, 16.74);
+      tl.from(".formula-board", { scale: 0.97, y: 28, autoAlpha: 0, duration: 0.62, ease: "expo.out" }, 16.92);
+      tl.from(".formula", { clipPath: "inset(0 100% 0 0)", autoAlpha: 0, duration: 0.58, ease: "steps(10)" }, 17.35);
+      tl.from(".result", { scale: 0.9, autoAlpha: 0, duration: 0.52, ease: "back.out(1.4)" }, 17.88);
+      tl.from(".dimension", { scaleX: 0, duration: 0.62, ease: "power4.out" }, 18.2);
+      tl.from(".filter-board", { x: 58, autoAlpha: 0, duration: 0.54, ease: "expo.out" }, 18.52);
+      tl.from(".filter-row", { x: 36, autoAlpha: 0, duration: 0.32, ease: "power2.out", stagger: 0.08 }, 18.9);
+      tl.from(".bracket.left", { x: -55, autoAlpha: 0, duration: 0.48, ease: "power4.out" }, 19.3);
+      tl.from(".bracket.right", { x: 55, autoAlpha: 0, duration: 0.48, ease: "power4.out" }, 19.3);
+      plotterTransition(22.08, "#scene-chart");
+
+      tl.addLabel("charts", 22.5);
+      tl.from("#scene-chart .label", { x: -30, autoAlpha: 0, duration: 0.36, ease: "power3.out" }, 22.72);
+      tl.from(".chart-panel", { y: 28, scale: 0.97, autoAlpha: 0, duration: 0.56, ease: "expo.out" }, 22.9);
+      tl.from(".bar", { scaleY: 0, duration: 0.68, ease: "power4.out", stagger: 0.07 }, 23.35);
+      tl.from("#line-chart-path", { strokeDasharray: 1000, strokeDashoffset: 1000, duration: 0.75, ease: "power2.inOut" }, 24.0);
+      tl.from("#data-dots circle", { scale: 0, transformOrigin: "center", duration: 0.3, ease: "back.out(1.5)", stagger: 0.08 }, 24.55);
+      tl.from(".export-stamp", { scale: 1.25, rotation: -8, autoAlpha: 0, duration: 0.42, ease: "back.out(1.8)" }, 25.2);
+      sheetTransition(28.55, "#scene-collab");
+
+      tl.addLabel("collab", 29.0);
+      tl.from("#scene-collab .label", { x: -30, autoAlpha: 0, duration: 0.36, ease: "power3.out" }, 29.2);
+      tl.from(".collab-sheet", { scale: 0.97, y: 24, autoAlpha: 0, duration: 0.58, ease: "expo.out" }, 29.42);
+      tl.from(".mini-grid div", { autoAlpha: 0, duration: 0.22, ease: "power1.out", stagger: { amount: 0.45, from: "center" } }, 29.86);
+      tl.from(".cursor-label", { x: -48, y: 22, autoAlpha: 0, duration: 0.48, ease: "power3.out", stagger: 0.18 }, 30.4);
+      tl.from("#redline-circle", { strokeDasharray: 680, strokeDashoffset: 680, duration: 0.72, ease: "sine.inOut" }, 30.9);
+      tl.from("#leader-line", { strokeDasharray: 160, strokeDashoffset: 160, duration: 0.38, ease: "power2.out" }, 31.38);
+      tl.from(".comment-card", { scaleX: 0.82, x: -36, autoAlpha: 0, duration: 0.5, ease: "back.out(1.3)" }, 31.55);
+      plotterTransition(35.02, "#scene-architecture");
+
+      tl.addLabel("architecture", 35.5);
+      tl.from("#scene-architecture .label", { x: -30, autoAlpha: 0, duration: 0.36, ease: "power3.out" }, 35.72);
+      tl.from(".architecture", { scale: 0.97, autoAlpha: 0, duration: 0.6, ease: "expo.out" }, 35.94);
+      tl.from(".node", { y: 34, scale: 0.93, autoAlpha: 0, duration: 0.48, ease: "back.out(1.2)", stagger: 0.12 }, 36.42);
+      tl.from(".arch-line", { strokeDasharray: 720, strokeDashoffset: 720, duration: 0.72, ease: "power2.inOut", stagger: 0.12 }, 37.1);
+      tl.from(".check-stamp", { scale: 1.22, rotation: -6, autoAlpha: 0, duration: 0.42, ease: "back.out(1.8)" }, 38.4);
+      tl.to(".architecture", { scale: 1.025, duration: 5.4, ease: "sine.inOut" }, 38.8);
+      sheetTransition(44.1, "#scene-close");
+
+      tl.addLabel("close", 44.5);
+      tl.from(".close-title", { y: 54, autoAlpha: 0, duration: 0.78, ease: "expo.out" }, 44.85);
+      tl.from(".close-sub", { y: 30, autoAlpha: 0, duration: 0.62, ease: "power3.out" }, 45.45);
+      tl.from(".measure-rule", { scaleX: 0, duration: 0.7, ease: "power4.out" }, 45.9);
+      tl.to(".measure-rule", { boxShadow: "0 0 80px rgba(103, 213, 255, 0.8)", duration: 1.1, ease: "sine.inOut", repeat: 2, yoyo: true }, 46.8);
+      tl.to("#scene-close .scene-inner", { autoAlpha: 0, y: -20, duration: 0.72, ease: "power2.in" }, 53.6);
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>
