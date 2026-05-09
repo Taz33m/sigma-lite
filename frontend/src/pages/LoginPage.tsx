@@ -17,16 +17,21 @@ import { useAuthStore } from '@/store/authStore';
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const setAuth = useAuthStore((state) => state.setAuth);
+  const setUser = useAuthStore((state) => state.setUser);
   const [formData, setFormData] = useState({
     username: '',
     password: '',
   });
 
   const loginMutation = useMutation({
-    mutationFn: (data: { username: string; password: string }) => authAPI.login(data),
-    onSuccess: (data) => {
-      setAuth(data.user);
+    mutationFn: async (data: { username: string; password: string }) => {
+      const tokens = await authAPI.login(data);
+      localStorage.setItem('access_token', tokens.access_token);
+      localStorage.setItem('refresh_token', tokens.refresh_token);
+      return authAPI.me();
+    },
+    onSuccess: (user) => {
+      setUser(user);
       toast.success('Login successful!');
       navigate('/');
     },

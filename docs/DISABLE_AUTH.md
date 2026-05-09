@@ -1,12 +1,18 @@
 # Disabling Authentication
 
-For easier development and testing, SigmaLite supports disabling authentication entirely.
+SigmaLite ships with an `DISABLE_AUTH` flag intended for local demos and
+quick tests where the friction of registration is unnecessary.
 
-## How to Disable Authentication
+> ⚠️ **Never enable this in any environment that is reachable from the
+> internet.** When the flag is on, every request is silently routed to a
+> built-in `demo_user` and there are no auth checks. The backend logs a
+> warning at startup whenever the flag is active.
+
+## How to enable it (local only)
 
 ### Backend
 
-Edit `backend/.env` and add:
+In `backend/.env`:
 
 ```env
 DISABLE_AUTH=True
@@ -14,66 +20,46 @@ DISABLE_AUTH=True
 
 ### Frontend
 
-Edit `frontend/.env` and add:
+In `frontend/.env`:
 
 ```env
 VITE_DISABLE_AUTH=true
 ```
 
-## What Happens When Auth is Disabled?
+Restart both servers after changing these.
 
-### Backend Behavior
+## What changes
 
-- All API endpoints bypass authentication checks
-- A demo user (`demo_user`) is automatically created and used for all requests
-- No JWT tokens are required
-- All data is associated with the demo user
+### Backend
+- All authenticated endpoints skip the JWT check.
+- The first request creates (or fetches) a `demo_user` record and treats it
+  as the current user for every subsequent request.
+- All datasets, sheets, and charts are owned by that demo user.
 
-### Frontend Behavior
+### Frontend
+- The `/login` and `/register` pages are still reachable but unnecessary.
+- Protected routes do not redirect; you can navigate straight to the
+  dashboard.
 
-- Login and Register pages are still accessible but not required
-- You can navigate directly to the dashboard at `http://localhost:5173/`
-- No authentication state is checked for protected routes
-- You can start uploading and working with data immediately
+## Default
 
-## Use Cases
+`DISABLE_AUTH` defaults to **`False`**. The shipped `.env.example` files
+also set it to `False` to make sure the flag is an explicit opt-in. Earlier
+revisions of the project shipped with the flag on — if you're upgrading,
+double-check your `.env`.
 
-✅ **Quick Testing** - Test features without creating accounts  
-✅ **Demos** - Show the platform without authentication friction  
-✅ **Development** - Focus on feature development without auth overhead  
-✅ **CI/CD** - Run automated tests without authentication setup  
+## Demo user details
 
-## Security Warning
+| Field      | Value                |
+| ---------- | -------------------- |
+| Username   | `demo_user`          |
+| Email      | `demo@sigmalite.com` |
+| Full name  | `Demo User`          |
 
-⚠️ **Never use `DISABLE_AUTH=True` in production!**
+The demo user is created on the first request after the flag is enabled.
 
-This feature is intended for:
-- Local development
-- Testing environments
-- Demos and presentations
+## Re-enabling normal auth
 
-## Re-enabling Authentication
-
-To re-enable authentication:
-
-1. **Backend**: Set `DISABLE_AUTH=False` in `backend/.env` (or remove the line)
-2. **Frontend**: Set `VITE_DISABLE_AUTH=false` in `frontend/.env` (or remove the line)
-3. Restart both servers
-
-## Default Configuration
-
-By default, authentication is **enabled** in production and **disabled** in the example configuration for easier onboarding.
-
-To use authentication from the start:
-- Remove or set `DISABLE_AUTH=False` in `backend/.env`
-- Remove or set `VITE_DISABLE_AUTH=false` in `frontend/.env`
-- Register a new account at `http://localhost:5173/register`
-
-## Demo User Details
-
-When authentication is disabled, all operations use:
-- **Username**: `demo_user`
-- **Email**: `demo@sigmalite.com`
-- **Full Name**: Demo User
-
-This user is automatically created on first API request.
+1. Set `DISABLE_AUTH=False` in `backend/.env` (or remove the line).
+2. Set `VITE_DISABLE_AUTH=false` in `frontend/.env` (or remove the line).
+3. Restart both servers and register at <http://localhost:5173/register>.

@@ -111,7 +111,7 @@ def update_chart(
             detail="Chart not found"
         )
     
-    update_data = chart_update.dict(exclude_unset=True)
+    update_data = chart_update.model_dump(exclude_unset=True)
     
     # Validate chart type if being updated
     if "chart_type" in update_data:

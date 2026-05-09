@@ -3,14 +3,21 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.rate_limit import check_auth_rate_limit
 from app.core.security import verify_password, get_password_hash, create_access_token, create_refresh_token
+from app.api.deps import get_current_user
 from app.models.user import User
-from app.schemas.user import UserCreate, User as UserSchema, Token
+from app.schemas.user import RefreshTokenRequest, UserCreate, User as UserSchema, Token
 
 router = APIRouter()
 
 
-@router.post("/register", response_model=UserSchema, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register",
+    response_model=UserSchema,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(check_auth_rate_limit)],
+)
 def register(user_in: UserCreate, db: Session = Depends(get_db)):
     """Register a new user."""
     # Check if user already exists
@@ -43,7 +50,11 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
     return user
 
 
-@router.post("/login", response_model=Token)
+@router.post(
+    "/login",
+    response_model=Token,
+    dependencies=[Depends(check_auth_rate_limit)],
+)
 def login(
     db: Session = Depends(get_db),
     form_data: OAuth2PasswordRequestForm = Depends()
@@ -65,9 +76,9 @@ def login(
             detail="Inactive user"
         )
     
-    # Create tokens
-    access_token = create_access_token(data={"sub": user.id})
-    refresh_token = create_refresh_token(data={"sub": user.id})
+    # Create tokens (JWT spec requires `sub` to be a string)
+    access_token = create_access_token(data={"sub": str(user.id)})
+    refresh_token = create_refresh_token(data={"sub": str(user.id)})
     
     return {
         "access_token": access_token,
@@ -76,12 +87,22 @@ def login(
     }
 
 
-@router.post("/refresh", response_model=Token)
-def refresh_token(token: str, db: Session = Depends(get_db)):
+@router.get("/me", response_model=UserSchema)
+def get_me(current_user: User = Depends(get_current_user)):
+    """Return the current authenticated user."""
+    return current_user
+
+
+@router.post(
+    "/refresh",
+    response_model=Token,
+    dependencies=[Depends(check_auth_rate_limit)],
+)
+def refresh_token(token_in: RefreshTokenRequest, db: Session = Depends(get_db)):
     """Refresh access token using refresh token."""
     from app.core.security import decode_token
     
-    payload = decode_token(token)
+    payload = decode_token(token_in.token)
     if payload is None or payload.get("type") != "refresh":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -89,17 +110,17 @@ def refresh_token(token: str, db: Session = Depends(get_db)):
         )
     
     user_id = payload.get("sub")
-    user = db.query(User).filter(User.id == user_id).first()
-    
+    user = db.query(User).filter(User.id == int(user_id)).first()
+
     if not user or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid user"
         )
-    
+
     # Create new tokens
-    access_token = create_access_token(data={"sub": user.id})
-    new_refresh_token = create_refresh_token(data={"sub": user.id})
+    access_token = create_access_token(data={"sub": str(user.id)})
+    new_refresh_token = create_refresh_token(data={"sub": str(user.id)})
     
     return {
         "access_token": access_token,

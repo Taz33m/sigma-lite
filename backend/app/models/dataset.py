@@ -45,6 +45,7 @@ class Sheet(Base):
     dataset = relationship("Dataset", back_populates="sheets")
     owner = relationship("User", back_populates="sheets")
     charts = relationship("Chart", back_populates="sheet", cascade="all, delete-orphan")
+    comments = relationship("Comment", back_populates="sheet", cascade="all, delete-orphan")
 
 
 class Chart(Base):
@@ -64,3 +65,22 @@ class Chart(Base):
     # Relationships
     sheet = relationship("Sheet", back_populates="charts")
     owner = relationship("User", back_populates="charts")
+
+
+class Comment(Base):
+    """Comment model for sheet collaboration."""
+
+    __tablename__ = "comments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    sheet_id = Column(Integer, ForeignKey("sheets.id"), nullable=False)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    text = Column(String, nullable=False)
+    row_index = Column(Integer, nullable=True)
+    column = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    sheet = relationship("Sheet", back_populates="comments")
+    owner = relationship("User", back_populates="comments")

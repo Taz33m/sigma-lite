@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -6,8 +8,17 @@ from app.core.config import settings
 from app.core.database import engine, Base
 from app.api.routes import auth, datasets, sheets, charts, websocket
 
+logger = logging.getLogger(__name__)
+
 # Create database tables
 Base.metadata.create_all(bind=engine)
+
+if settings.DISABLE_AUTH:
+    logger.warning(
+        "DISABLE_AUTH is enabled: authentication is bypassed and all requests "
+        "will be served as the built-in demo user. Do NOT run with this setting "
+        "in any environment exposed to untrusted networks."
+    )
 
 # Create FastAPI app
 app = FastAPI(

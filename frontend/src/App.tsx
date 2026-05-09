@@ -1,15 +1,15 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
-import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
+import { ThemeProvider, createTheme, CssBaseline, Box, CircularProgress } from '@mui/material';
 import { useAuthStore } from '@/store/authStore';
 
-// Pages
-import LoginPage from '@/pages/LoginPage';
-import RegisterPage from '@/pages/RegisterPage';
-import DashboardPage from '@/pages/DashboardPage';
-import DatasetPage from '@/pages/DatasetPage';
-import SheetPage from '@/pages/SheetPage';
+const LoginPage = lazy(() => import('@/pages/LoginPage'));
+const RegisterPage = lazy(() => import('@/pages/RegisterPage'));
+const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
+const DatasetPage = lazy(() => import('@/pages/DatasetPage'));
+const SheetPage = lazy(() => import('@/pages/SheetPage'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -43,40 +43,50 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" />;
 }
 
+function PageFallback() {
+  return (
+    <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+      <CircularProgress />
+    </Box>
+  );
+}
+
 function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <QueryClientProvider client={queryClient}>
         <Router>
-          <Routes>
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/register" element={<RegisterPage />} />
-              <Route
-                path="/"
-                element={
-                  <PrivateRoute>
-                    <DashboardPage />
-                  </PrivateRoute>
-                }
-              />
-              <Route
-                path="/dataset/:id"
-                element={
-                  <PrivateRoute>
-                    <DatasetPage />
-                  </PrivateRoute>
-                }
-              />
-              <Route
-                path="/sheet/:id"
-                element={
-                  <PrivateRoute>
-                    <SheetPage />
-                  </PrivateRoute>
-                }
-              />
-          </Routes>
+          <Suspense fallback={<PageFallback />}>
+            <Routes>
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/register" element={<RegisterPage />} />
+                <Route
+                  path="/"
+                  element={
+                    <PrivateRoute>
+                      <DashboardPage />
+                    </PrivateRoute>
+                  }
+                />
+                <Route
+                  path="/dataset/:id"
+                  element={
+                    <PrivateRoute>
+                      <DatasetPage />
+                    </PrivateRoute>
+                  }
+                />
+                <Route
+                  path="/sheet/:id"
+                  element={
+                    <PrivateRoute>
+                      <SheetPage />
+                    </PrivateRoute>
+                  }
+                />
+            </Routes>
+          </Suspense>
           <Toaster position="top-right" />
         </Router>
       </QueryClientProvider>

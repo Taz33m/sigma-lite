@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from typing import Optional
 from datetime import datetime
 
@@ -25,14 +25,13 @@ class UserUpdate(BaseModel):
 
 class UserInDB(UserBase):
     """Schema for user in database."""
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     is_active: bool
     is_superuser: bool
     created_at: datetime
     updated_at: Optional[datetime] = None
-    
-    class Config:
-        from_attributes = True
 
 
 class User(UserInDB):
@@ -53,8 +52,13 @@ class Token(BaseModel):
     token_type: str = "bearer"
 
 
+class RefreshTokenRequest(BaseModel):
+    """Schema for refresh token requests."""
+    token: str
+
+
 class TokenPayload(BaseModel):
     """Schema for token payload."""
-    sub: Optional[int] = None
+    sub: Optional[str] = None
     exp: Optional[int] = None
     type: Optional[str] = None

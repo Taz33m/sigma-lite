@@ -3,6 +3,7 @@ import numpy as np
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 import json
+import re
 
 
 class DataProcessor:
@@ -59,7 +60,8 @@ class DataProcessor:
         start_idx = (page - 1) * page_size
         end_idx = start_idx + page_size
         
-        page_data = df.iloc[start_idx:end_idx]
+        page_data = df.iloc[start_idx:end_idx].copy()
+        page_data["__source_index"] = page_data.index
         
         # Convert to list of dicts, handling NaN values
         data = json.loads(page_data.to_json(orient='records', date_format='iso'))
@@ -71,6 +73,117 @@ class DataProcessor:
             "page_size": page_size,
             "total_pages": total_pages
         }
+
+    @staticmethod
+    def evaluate_formula(df: pd.DataFrame, formula: str) -> Any:
+        """Evaluate a small set of spreadsheet-like aggregate formulas."""
+        expression = formula.strip()
+        if not expression.startswith("="):
+            return formula
+
+        expression = expression[1:].strip()
+        if "(" not in expression or not expression.endswith(")"):
+            raise ValueError("Unsupported formula")
+
+        operation, reference = expression[:-1].split("(", 1)
+        operation = operation.strip().lower()
+        reference = reference.strip()
+
+        series = DataProcessor._formula_series(df, reference)
+        numeric_series = pd.to_numeric(series, errors="coerce")
+
+        if operation == "sum":
+            return float(numeric_series.sum())
+        if operation in {"avg", "average"}:
+            return float(numeric_series.mean())
+        if operation == "min":
+            return float(numeric_series.min())
+        if operation == "max":
+            return float(numeric_series.max())
+        if operation == "count":
+            return int(series.count())
+        if operation == "median":
+            return float(numeric_series.median())
+
+        raise ValueError(f"Unknown formula: {operation}")
+
+    @staticmethod
+    def _formula_series(df: pd.DataFrame, reference: str) -> pd.Series:
+        """Resolve a formula reference to a Series.
+
+        Supports existing column names, whole-column references such as B:B,
+        and one-based A1 ranges such as A1:A5.
+        """
+        if reference in df.columns:
+            return df[reference]
+
+        whole_column_match = re.fullmatch(
+            r"([A-Za-z]+):\1",
+            reference.replace("$", ""),
+        )
+        if whole_column_match:
+            column = DataProcessor._column_from_letters(df, whole_column_match.group(1))
+            return df[column]
+
+        range_match = re.fullmatch(
+            r"([A-Za-z]+)(\d+):([A-Za-z]+)(\d+)",
+            reference.replace("$", ""),
+        )
+        if range_match:
+            start_letters, start_row, end_letters, end_row = range_match.groups()
+            start_column_index = DataProcessor._letters_to_index(start_letters)
+            end_column_index = DataProcessor._letters_to_index(end_letters)
+            if start_column_index != end_column_index:
+                raise ValueError("Formula ranges must stay within one column")
+
+            column = DataProcessor._column_from_letters(df, start_letters)
+            start_index = int(start_row) - 1
+            end_index = int(end_row) - 1
+            if start_index < 0 or end_index < start_index:
+                raise ValueError("Invalid formula row range")
+            if start_index >= len(df):
+                raise ValueError("Formula row range starts outside dataset")
+
+            return df[column].iloc[start_index : min(end_index + 1, len(df))]
+
+        raise ValueError(f"Column or range '{reference}' not found")
+
+    @staticmethod
+    def _column_from_letters(df: pd.DataFrame, letters: str) -> str:
+        column_index = DataProcessor._letters_to_index(letters)
+        if column_index < 0 or column_index >= len(df.columns):
+            raise ValueError(f"Column '{letters}' not found")
+        return str(df.columns[column_index])
+
+    @staticmethod
+    def _letters_to_index(letters: str) -> int:
+        index = 0
+        for char in letters.upper():
+            if not "A" <= char <= "Z":
+                raise ValueError(f"Invalid column reference '{letters}'")
+            index = index * 26 + (ord(char) - ord("A") + 1)
+        return index - 1
+
+    @staticmethod
+    def update_cell(
+        df: pd.DataFrame,
+        row_index: int,
+        column: str,
+        value: Any
+    ) -> tuple[pd.DataFrame, Any]:
+        """Update one cell by source row index and return the stored value."""
+        if row_index < 0 or row_index >= len(df):
+            raise ValueError("Row index out of range")
+        if column not in df.columns:
+            raise ValueError(f"Column '{column}' not found")
+
+        stored_value = (
+            DataProcessor.evaluate_formula(df, value)
+            if isinstance(value, str) and value.strip().startswith("=")
+            else value
+        )
+        df.at[row_index, column] = stored_value
+        return df, stored_value
     
     @staticmethod
     def apply_filters(
@@ -90,7 +203,7 @@ class DataProcessor:
             value = f["value"]
             
             if column not in df.columns:
-                continue
+                raise ValueError(f"Column '{column}' not found")
             
             if operator == "eq":
                 mask = df[column] == value
@@ -111,7 +224,7 @@ class DataProcessor:
             elif operator == "endswith":
                 mask = df[column].astype(str).str.endswith(str(value), na=False)
             else:
-                continue
+                raise ValueError(f"Unknown filter operator: {operator}")
             
             masks.append(mask)
         

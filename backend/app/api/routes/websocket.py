@@ -18,6 +18,12 @@ async def get_user_from_token(token: str, db: Session) -> User:
         return None
     
     user_id = payload.get("sub")
+    if user_id is None:
+        return None
+    try:
+        user_id = int(user_id)
+    except (TypeError, ValueError):
+        return None
     user = db.query(User).filter(User.id == user_id).first()
     return user
 

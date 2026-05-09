@@ -1,5 +1,5 @@
-from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any, List
+from pydantic import BaseModel, ConfigDict, Field
+from typing import Optional, Dict, Any, List, Literal
 from datetime import datetime
 
 
@@ -22,18 +22,17 @@ class DatasetUpdate(BaseModel):
 
 class Dataset(DatasetBase):
     """Public dataset schema."""
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
     id: int
     file_name: str
     file_size: int
     row_count: int
     column_count: int
-    schema: Optional[Dict[str, Any]] = None
+    schema_: Optional[Dict[str, Any]] = Field(None, alias="schema")
     owner_id: int
     created_at: datetime
     updated_at: Optional[datetime] = None
-    
-    class Config:
-        from_attributes = True
 
 
 class DatasetData(BaseModel):
@@ -45,17 +44,41 @@ class DatasetData(BaseModel):
     total_pages: int
 
 
+class CellUpdateRequest(BaseModel):
+    """Schema for updating one dataset cell."""
+    row_index: int = Field(..., ge=0)
+    column: str
+    value: Any
+
+
+class CellUpdateResult(BaseModel):
+    """Schema for a cell update result."""
+    row_index: int
+    column: str
+    value: Any
+
+
 class FilterRequest(BaseModel):
     """Schema for filter request."""
     column: str
-    operator: str  # eq, ne, gt, lt, gte, lte, contains, startswith, endswith
+    operator: Literal[
+        "eq",
+        "ne",
+        "gt",
+        "lt",
+        "gte",
+        "lte",
+        "contains",
+        "startswith",
+        "endswith",
+    ]
     value: Any
     
 
 class FilterQuery(BaseModel):
     """Schema for multiple filters."""
     filters: List[FilterRequest]
-    logic: str = "and"  # and, or
+    logic: Literal["and", "or"] = "and"
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=100, ge=1, le=1000)
 
@@ -95,14 +118,35 @@ class SheetUpdate(BaseModel):
 
 class Sheet(SheetBase):
     """Public sheet schema."""
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     owner_id: int
     config: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
-    
-    class Config:
-        from_attributes = True
+
+
+class CommentCreate(BaseModel):
+    """Schema for creating a sheet comment."""
+    text: str = Field(..., min_length=1, max_length=2000)
+    row_index: Optional[int] = Field(None, ge=0)
+    column: Optional[str] = None
+
+
+class Comment(BaseModel):
+    """Public sheet comment schema."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    sheet_id: int
+    owner_id: int
+    username: str
+    text: str
+    row_index: Optional[int] = None
+    column: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
 
 
 # Chart schemas
@@ -127,11 +171,10 @@ class ChartUpdate(BaseModel):
 
 class Chart(ChartBase):
     """Public chart schema."""
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     owner_id: int
     config: Dict[str, Any]
     created_at: datetime
     updated_at: Optional[datetime] = None
-    
-    class Config:
-        from_attributes = True

@@ -1,25 +1,33 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import os
 import shutil
+from uuid import uuid4
 from pathlib import Path
 
 from app.core.database import get_db
 from app.core.config import settings
+from app.core.rate_limit import check_upload_rate_limit
 from app.api.deps import get_current_user
 from app.models.user import User
 from app.models.dataset import Dataset as DatasetModel
 from app.schemas.dataset import (
     Dataset, DatasetCreate, DatasetUpdate, DatasetData,
-    FilterQuery, AggregateRequest, AggregateResult
+    FilterQuery, AggregateRequest, AggregateResult, CellUpdateRequest,
+    CellUpdateResult
 )
 from app.services.data_processor import DataProcessor
 
 router = APIRouter()
 
 
-@router.post("", response_model=Dataset, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=Dataset,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(check_upload_rate_limit)],
+)
 async def upload_dataset(
     name: str = Form(...),
     description: Optional[str] = Form(None),
@@ -28,8 +36,10 @@ async def upload_dataset(
     current_user: User = Depends(get_current_user)
 ):
     """Upload a new dataset."""
+    original_filename = Path(file.filename or "").name
+
     # Validate file type
-    if not file.filename.endswith('.csv'):
+    if Path(original_filename).suffix.lower() != ".csv":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only CSV files are supported"
@@ -50,8 +60,10 @@ async def upload_dataset(
     user_upload_dir = Path(settings.UPLOAD_DIR) / str(current_user.id)
     user_upload_dir.mkdir(parents=True, exist_ok=True)
     
-    # Save file
-    file_path = user_upload_dir / file.filename
+    # Save file under a unique server-side name so repeated original filenames
+    # do not overwrite each other for the same user.
+    stored_filename = f"{uuid4().hex}.csv"
+    file_path = user_upload_dir / stored_filename
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
     
@@ -65,7 +77,7 @@ async def upload_dataset(
         dataset = DatasetModel(
             name=name,
             description=description,
-            file_name=file.filename,
+            file_name=original_filename,
             file_path=str(file_path),
             file_size=file_size,
             row_count=len(df),
@@ -92,8 +104,8 @@ async def upload_dataset(
 
 @router.get("", response_model=List[Dataset])
 def list_datasets(
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=1000),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -129,8 +141,8 @@ def get_dataset(
 @router.get("/{dataset_id}/data", response_model=DatasetData)
 def get_dataset_data(
     dataset_id: int,
-    page: int = 1,
-    page_size: int = 100,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=100, ge=1, le=1000),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -184,7 +196,7 @@ def filter_dataset(
         df = processor.read_csv(dataset.file_path)
         
         # Apply filters
-        filters = [f.dict() for f in filter_query.filters]
+        filters = [f.model_dump() for f in filter_query.filters]
         filtered_df = processor.apply_filters(df, filters, filter_query.logic)
         
         # Get paginated result
@@ -196,6 +208,11 @@ def filter_dataset(
         
         return result
     
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -247,6 +264,60 @@ def aggregate_dataset(
         )
 
 
+@router.patch("/{dataset_id}/cell", response_model=CellUpdateResult)
+def update_dataset_cell(
+    dataset_id: int,
+    cell_update: CellUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Update a single dataset cell and persist it to the CSV backing file."""
+    dataset = db.query(DatasetModel).filter(
+        DatasetModel.id == dataset_id,
+        DatasetModel.owner_id == current_user.id
+    ).first()
+
+    if not dataset:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Dataset not found"
+        )
+
+    try:
+        processor = DataProcessor()
+        df = processor.read_csv(dataset.file_path)
+        df, stored_value = processor.update_cell(
+            df,
+            cell_update.row_index,
+            cell_update.column,
+            cell_update.value
+        )
+        df.to_csv(dataset.file_path, index=False)
+
+        dataset.file_size = Path(dataset.file_path).stat().st_size
+        dataset.row_count = len(df)
+        dataset.column_count = len(df.columns)
+        dataset.schema = processor.infer_schema(df)
+        db.commit()
+
+        return {
+            "row_index": cell_update.row_index,
+            "column": cell_update.column,
+            "value": stored_value
+        }
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating dataset cell: {str(e)}"
+        )
+
+
 @router.put("/{dataset_id}", response_model=Dataset)
 def update_dataset(
     dataset_id: int,
@@ -266,7 +337,7 @@ def update_dataset(
             detail="Dataset not found"
         )
     
-    update_data = dataset_update.dict(exclude_unset=True)
+    update_data = dataset_update.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(dataset, field, value)
     

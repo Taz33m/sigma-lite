@@ -23,3 +23,4 @@ class User(Base):
     datasets = relationship("Dataset", back_populates="owner", cascade="all, delete-orphan")
     sheets = relationship("Sheet", back_populates="owner", cascade="all, delete-orphan")
     charts = relationship("Chart", back_populates="owner", cascade="all, delete-orphan")
+    comments = relationship("Comment", back_populates="owner", cascade="all, delete-orphan")
