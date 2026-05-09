@@ -55,6 +55,6 @@ class Token(BaseModel):
 
 class TokenPayload(BaseModel):
     """Schema for token payload."""
-    sub: Optional[int] = None
+    sub: Optional[str] = None
     exp: Optional[int] = None
     type: Optional[str] = None

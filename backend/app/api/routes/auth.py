@@ -65,9 +65,9 @@ def login(
             detail="Inactive user"
         )
     
-    # Create tokens
-    access_token = create_access_token(data={"sub": user.id})
-    refresh_token = create_refresh_token(data={"sub": user.id})
+    # Create tokens (JWT spec requires `sub` to be a string)
+    access_token = create_access_token(data={"sub": str(user.id)})
+    refresh_token = create_refresh_token(data={"sub": str(user.id)})
     
     return {
         "access_token": access_token,
@@ -89,17 +89,17 @@ def refresh_token(token: str, db: Session = Depends(get_db)):
         )
     
     user_id = payload.get("sub")
-    user = db.query(User).filter(User.id == user_id).first()
-    
+    user = db.query(User).filter(User.id == int(user_id)).first()
+
     if not user or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid user"
         )
-    
+
     # Create new tokens
-    access_token = create_access_token(data={"sub": user.id})
-    new_refresh_token = create_refresh_token(data={"sub": user.id})
+    access_token = create_access_token(data={"sub": str(user.id)})
+    new_refresh_token = create_refresh_token(data={"sub": str(user.id)})
     
     return {
         "access_token": access_token,
