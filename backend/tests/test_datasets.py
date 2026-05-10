@@ -23,6 +23,17 @@ def test_upload_rejects_non_csv(client, auth_headers):
     assert response.status_code == 400
 
 
+def test_upload_rejects_empty_csv(client, auth_headers):
+    response = client.post(
+        "/api/datasets",
+        headers=auth_headers,
+        data={"name": "empty"},
+        files={"file": ("empty.csv", b"", "text/csv")},
+    )
+    assert response.status_code == 400
+    assert "Invalid CSV file" in response.json()["detail"]
+
+
 def test_upload_sanitizes_display_filename(client, auth_headers, sample_csv_bytes):
     response = client.post(
         "/api/datasets",
@@ -139,6 +150,38 @@ def test_filter_dataset(client, auth_headers, uploaded_dataset):
     assert body["total_rows"] == 1
     assert body["data"][0]["name"] == "Alice"
     assert body["data"][0]["__source_index"] == 0
+
+
+def test_filter_dataset_coerces_numeric_comparison_value(
+    client, auth_headers, uploaded_dataset
+):
+    response = client.post(
+        f"/api/datasets/{uploaded_dataset['id']}/filter",
+        headers=auth_headers,
+        json={
+            "filters": [{"column": "age", "operator": "gt", "value": "25"}],
+            "logic": "and",
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total_rows"] == 2
+    assert [row["name"] for row in body["data"]] == ["Alice", "Carol"]
+
+
+def test_filter_dataset_rejects_invalid_numeric_comparison_value(
+    client, auth_headers, uploaded_dataset
+):
+    response = client.post(
+        f"/api/datasets/{uploaded_dataset['id']}/filter",
+        headers=auth_headers,
+        json={
+            "filters": [{"column": "age", "operator": "gt", "value": "old"}],
+            "logic": "and",
+        },
+    )
+    assert response.status_code == 400
+    assert "must be numeric" in response.json()["detail"]
 
 
 def test_update_dataset_cell_persists_value(client, auth_headers, uploaded_dataset):

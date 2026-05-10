@@ -23,6 +23,7 @@ from sqlalchemy.pool import StaticPool
 from app.main import app
 from app.core.config import settings
 from app.core.database import Base, get_db
+from app.core.rate_limit import rate_limiter
 
 
 @pytest.fixture(scope="session")
@@ -51,6 +52,7 @@ def db_session(engine):
 @pytest.fixture
 def client(db_session, tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "UPLOAD_DIR", str(tmp_path))
+    rate_limiter.reset()
 
     def override_get_db():
         try:

@@ -104,6 +104,16 @@ def test_refresh_token(client):
     assert body["refresh_token"]
 
 
+def test_refresh_token_rejects_malformed_subject(client):
+    from app.core.security import create_refresh_token
+
+    token = create_refresh_token({"sub": "not-a-user-id"})
+    response = client.post("/api/auth/refresh", json={"token": token})
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid refresh token"
+
+
 def test_login_wrong_password(client):
     client.post(
         "/api/auth/register",

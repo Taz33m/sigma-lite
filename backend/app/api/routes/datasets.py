@@ -6,6 +6,7 @@ import shutil
 from uuid import uuid4
 from pathlib import Path
 
+import pandas as pd
 from app.core.database import get_db
 from app.core.config import settings
 from app.core.rate_limit import check_upload_rate_limit
@@ -92,6 +93,14 @@ async def upload_dataset(
         
         return dataset
     
+    except (pd.errors.EmptyDataError, pd.errors.ParserError, UnicodeDecodeError) as e:
+        # Clean up file if processing fails
+        if file_path.exists():
+            file_path.unlink()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid CSV file: {str(e)}"
+        )
     except Exception as e:
         # Clean up file if processing fails
         if file_path.exists():

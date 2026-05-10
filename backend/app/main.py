@@ -5,13 +5,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.core.config import settings
-from app.core.database import engine, Base
 from app.api.routes import auth, datasets, sheets, charts, websocket
 
 logger = logging.getLogger(__name__)
-
-# Create database tables
-Base.metadata.create_all(bind=engine)
 
 if settings.DISABLE_AUTH:
     logger.warning(

@@ -16,6 +16,9 @@ class InMemoryRateLimiter:
     def __init__(self) -> None:
         self._hits: Dict[str, Deque[float]] = defaultdict(deque)
 
+    def reset(self) -> None:
+        self._hits.clear()
+
     def check(self, key: str, limit: int, window_seconds: int) -> None:
         now = time.monotonic()
         hits = self._hits[key]

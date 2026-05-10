@@ -84,7 +84,20 @@ test('core product loop: auth, upload, sheet, edit, filter, chart, comment, expo
   await expect(page.getByRole('cell', { name: '95' }).first()).toBeVisible();
 
   await page.getByLabel('Column').first().click();
+  await page.getByRole('option', { name: 'age' }).click();
+  await page.getByLabel('Operator').click();
+  await page.getByRole('option', { name: 'gt', exact: true }).click();
+  await page.getByLabel('Value').fill('35');
+  await page.getByRole('button', { name: /^add$/i }).click();
+  await expect(page.getByText(/1 active filter/i)).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Carol' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Alice' })).toHaveCount(0);
+  await page.getByRole('button', { name: /^clear$/i }).click();
+
+  await page.getByLabel('Column').first().click();
   await page.getByRole('option', { name: 'city' }).click();
+  await page.getByLabel('Operator').click();
+  await page.getByRole('option', { name: 'eq' }).click();
   await page.getByLabel('Value').fill('LA');
   await page.getByRole('button', { name: /^add$/i }).click();
   await expect(page.getByText(/1 active filter/i)).toBeVisible();
