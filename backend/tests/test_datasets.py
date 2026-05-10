@@ -169,6 +169,40 @@ def test_filter_dataset_coerces_numeric_comparison_value(
     assert [row["name"] for row in body["data"]] == ["Alice", "Carol"]
 
 
+def test_filter_dataset_coerces_numeric_equality_value(
+    client, auth_headers, uploaded_dataset
+):
+    response = client.post(
+        f"/api/datasets/{uploaded_dataset['id']}/filter",
+        headers=auth_headers,
+        json={
+            "filters": [{"column": "age", "operator": "eq", "value": "25"}],
+            "logic": "and",
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total_rows"] == 1
+    assert body["data"][0]["name"] == "Bob"
+
+
+def test_filter_dataset_coerces_numeric_not_equal_value(
+    client, auth_headers, uploaded_dataset
+):
+    response = client.post(
+        f"/api/datasets/{uploaded_dataset['id']}/filter",
+        headers=auth_headers,
+        json={
+            "filters": [{"column": "age", "operator": "ne", "value": "25"}],
+            "logic": "and",
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total_rows"] == 2
+    assert [row["name"] for row in body["data"]] == ["Alice", "Carol"]
+
+
 def test_filter_dataset_rejects_invalid_numeric_comparison_value(
     client, auth_headers, uploaded_dataset
 ):

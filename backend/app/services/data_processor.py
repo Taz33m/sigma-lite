@@ -206,9 +206,13 @@ class DataProcessor:
                 raise ValueError(f"Column '{column}' not found")
             
             if operator == "eq":
-                mask = df[column] == value
+                mask = df[column] == DataProcessor._coerce_filter_value(
+                    df[column], value, column
+                )
             elif operator == "ne":
-                mask = df[column] != value
+                mask = df[column] != DataProcessor._coerce_filter_value(
+                    df[column], value, column
+                )
             elif operator == "gt":
                 mask = df[column] > DataProcessor._coerce_filter_value(
                     df[column], value, column
@@ -253,7 +257,7 @@ class DataProcessor:
 
     @staticmethod
     def _coerce_filter_value(series: pd.Series, value: Any, column: str) -> Any:
-        """Coerce comparison filter values to the target column type."""
+        """Coerce exact/comparison filter values to the target column type."""
         if pd.api.types.is_numeric_dtype(series):
             coerced = pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0]
             if pd.isna(coerced):
