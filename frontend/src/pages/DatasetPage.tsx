@@ -6,7 +6,6 @@ import {
   Toolbar,
   Typography,
   Button,
-  Container,
   Box,
   Paper,
   IconButton,
@@ -14,7 +13,6 @@ import {
   Alert,
   Stack,
   Chip,
-  Divider,
   List,
   ListItem,
   ListItemText,
@@ -67,46 +65,117 @@ export default function DatasetPage() {
   const isError = isDatasetError || isDataError || !Number.isFinite(datasetId);
 
   return (
-    <Box>
-      <AppBar position="static">
-        <Toolbar>
-          <IconButton edge="start" color="inherit" onClick={() => navigate('/')} sx={{ mr: 2 }}>
+    <Box
+      sx={{
+        height: { xs: 'auto', lg: '100vh' },
+        minHeight: '100vh',
+        overflow: { xs: 'auto', lg: 'hidden' },
+        bgcolor: 'grey.50',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      <AppBar
+        position="static"
+        elevation={0}
+        sx={{
+          bgcolor: 'background.paper',
+          color: 'text.primary',
+          borderBottom: 1,
+          borderColor: 'divider',
+        }}
+      >
+        <Toolbar variant="dense" sx={{ minHeight: 56 }}>
+          <IconButton edge="start" color="inherit" onClick={() => navigate('/')} sx={{ mr: 1.5 }}>
             <ArrowBack />
           </IconButton>
-          <Box sx={{ flexGrow: 1 }}>
-            <Typography variant="h6">{dataset?.name}</Typography>
-            <Typography variant="caption">{dataset?.description}</Typography>
+          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+            <Typography variant="subtitle1" fontWeight={700} noWrap>
+              {dataset?.name}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" noWrap component="div">
+              {dataset?.description || dataset?.file_name}
+            </Typography>
           </Box>
           <Button
-            color="inherit"
+            variant="outlined"
             startIcon={<Addchart />}
             disabled={!dataset || createSheetMutation.isPending}
             onClick={() => createSheetMutation.mutate()}
+            size="small"
           >
             {createSheetMutation.isPending ? 'Creating...' : 'Create Sheet'}
           </Button>
         </Toolbar>
       </AppBar>
 
-      <Container maxWidth="xl" sx={{ mt: 4 }}>
+      <Box
+        sx={{
+          flex: 1,
+          minHeight: { xs: 'auto', lg: 0 },
+          p: { xs: 1.5, lg: 2 },
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 1.5,
+        }}
+      >
         {isLoading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+          <Box
+            sx={{
+              flex: 1,
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}
+          >
             <CircularProgress />
           </Box>
         ) : isError ? (
           <Alert severity="error">Unable to load this dataset.</Alert>
         ) : (
-          <Stack spacing={3}>
-            <Paper sx={{ p: 2 }}>
-              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-                <Chip label={`${dataset?.row_count.toLocaleString()} rows`} />
-                <Chip label={`${dataset?.column_count} columns`} />
-                <Chip label={dataset?.file_name || 'CSV'} icon={<Description />} />
+          <>
+            <Paper
+              variant="outlined"
+              sx={{
+                px: 2,
+                py: 1.5,
+                borderRadius: 1,
+                boxShadow: 'none',
+              }}
+            >
+              <Stack
+                direction={{ xs: 'column', md: 'row' }}
+                spacing={1.25}
+                alignItems={{ xs: 'flex-start', md: 'center' }}
+                flexWrap="wrap"
+                useFlexGap
+              >
+                <Chip size="small" label={`${dataset?.row_count.toLocaleString()} rows`} />
+                <Chip size="small" label={`${dataset?.column_count} columns`} />
+                <Chip size="small" label={dataset?.file_name || 'CSV'} icon={<Description />} />
               </Stack>
             </Paper>
 
-            <Stack direction={{ xs: 'column', lg: 'row' }} spacing={3}>
-              <Paper sx={{ height: 620, flex: 1, minWidth: 0 }}>
+            <Box
+              sx={{
+                flex: 1,
+                minHeight: { xs: 'auto', lg: 0 },
+                display: 'flex',
+                gap: 1.5,
+                flexDirection: { xs: 'column', lg: 'row' },
+              }}
+            >
+              <Paper
+                variant="outlined"
+                sx={{
+                  height: { xs: 560, lg: '100%' },
+                  flex: 1,
+                  minWidth: 0,
+                  overflow: 'hidden',
+                  borderRadius: 1,
+                  boxShadow: 'none',
+                }}
+              >
                 <DataGrid
                   rows={rows}
                   columns={columns}
@@ -117,29 +186,73 @@ export default function DatasetPage() {
                   }}
                   checkboxSelection
                   disableRowSelectionOnClick
+                  density="compact"
+                  rowHeight={42}
+                  columnHeaderHeight={44}
+                  sx={{
+                    border: 0,
+                    '& .MuiDataGrid-columnHeaders': {
+                      backgroundColor: 'grey.50',
+                    },
+                    '& .MuiDataGrid-cell': {
+                      borderColor: 'grey.200',
+                    },
+                    '& .MuiDataGrid-footerContainer': {
+                      minHeight: 46,
+                    },
+                  }}
                 />
               </Paper>
 
-              <Paper sx={{ p: 2, width: { xs: '100%', lg: 320 } }}>
-                <Typography variant="h6" gutterBottom>
-                  Schema
-                </Typography>
-                <Divider />
-                <List dense>
-                  {dataset?.schema?.columns.map((column) => (
-                    <ListItem key={column.name} disableGutters>
-                      <ListItemText
-                        primary={column.name}
-                        secondary={`${column.semantic_type} · ${column.type}`}
-                      />
-                    </ListItem>
-                  ))}
-                </List>
+              <Paper
+                variant="outlined"
+                sx={{
+                  width: { xs: '100%', lg: 360 },
+                  height: { xs: 460, lg: '100%' },
+                  flexShrink: 0,
+                  minHeight: 0,
+                  overflow: 'hidden',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  borderRadius: 1,
+                  boxShadow: 'none',
+                }}
+              >
+                <Box sx={{ px: 2, py: 1.5, borderBottom: 1, borderColor: 'divider' }}>
+                  <Typography variant="subtitle1" fontWeight={700}>
+                    Schema
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {dataset?.schema?.columns.length || 0} inferred columns
+                  </Typography>
+                </Box>
+                <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto', px: 2 }}>
+                  <List dense disablePadding>
+                    {dataset?.schema?.columns.map((column) => (
+                      <ListItem
+                        key={column.name}
+                        disableGutters
+                        sx={{ py: 1.25, borderBottom: 1, borderColor: 'divider' }}
+                      >
+                        <ListItemText
+                          primary={column.name}
+                          secondary={`${column.semantic_type} · ${column.type}`}
+                          primaryTypographyProps={{
+                            variant: 'body2',
+                            noWrap: true,
+                            sx: { fontWeight: 700 },
+                          }}
+                          secondaryTypographyProps={{ variant: 'caption' }}
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
+                </Box>
               </Paper>
-            </Stack>
-          </Stack>
+            </Box>
+          </>
         )}
-      </Container>
+      </Box>
     </Box>
   );
 }

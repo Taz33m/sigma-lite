@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="frontend/public/sigmalite-icon.svg" alt="SigmaLite icon" width="88" />
+</p>
+
 <h1 align="center">SigmaLite</h1>
 
 <p align="center">
@@ -15,9 +19,7 @@
 </p>
 
 <p align="center">
-  <a href="https://youtu.be/aDMvTl-uKQ0">
-    <img src="https://img.youtube.com/vi/aDMvTl-uKQ0/maxresdefault.jpg" alt="SigmaLite demo video" width="820" />
-  </a>
+  <img src="assets/demo/sigmalite-product-tour.gif" alt="SigmaLite product tour showing schema, sheet, charts, and comments" width="820" />
 </p>
 
 <p align="center">
