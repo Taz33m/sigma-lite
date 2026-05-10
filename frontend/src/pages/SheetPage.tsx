@@ -6,7 +6,6 @@ import {
   AppBar,
   Toolbar,
   Typography,
-  Container,
   Box,
   Paper,
   IconButton,
@@ -24,6 +23,8 @@ import {
   MenuItem,
   TextField,
   Button,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import {
   ArrowBack,
@@ -82,6 +83,7 @@ const aggregateOperations: AggregateRequest['operation'][] = [
 ];
 
 const chartTypes: ChartCreate['chart_type'][] = ['bar', 'line', 'scatter', 'pie'];
+type InspectorTab = 'filters' | 'summary' | 'fields' | 'comments' | 'charts';
 
 export default function SheetPage() {
   const { id } = useParams<{ id: string }>();
@@ -116,6 +118,8 @@ export default function SheetPage() {
     },
   });
   const [hydratedSheetId, setHydratedSheetId] = useState<number | null>(null);
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>('filters');
+  const [fieldSearch, setFieldSearch] = useState('');
   const {
     activeUsers,
     activeUserCount,
@@ -236,6 +240,15 @@ export default function SheetPage() {
   const numericColumns = schemaColumns.filter(
     (column) => column.semantic_type === 'numeric'
   );
+  const filteredSchemaColumns = schemaColumns.filter((column) => {
+    const needle = fieldSearch.trim().toLowerCase();
+    if (!needle) {
+      return true;
+    }
+    return `${column.name} ${column.semantic_type} ${column.type}`
+      .toLowerCase()
+      .includes(needle);
+  });
   const isLoading = isSheetLoading || isDatasetLoading;
   const isError =
     isSheetError || isDatasetError || isDataError || !Number.isFinite(sheetId);
@@ -501,33 +514,71 @@ export default function SheetPage() {
     : null;
 
   return (
-    <Box>
-      <AppBar position="static">
-        <Toolbar>
+    <Box
+      sx={{
+        height: { xs: 'auto', lg: '100vh' },
+        minHeight: '100vh',
+        overflow: { xs: 'auto', lg: 'hidden' },
+        bgcolor: 'grey.50',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      <AppBar
+        position="static"
+        elevation={0}
+        sx={{
+          bgcolor: 'background.paper',
+          color: 'text.primary',
+          borderBottom: 1,
+          borderColor: 'divider',
+        }}
+      >
+        <Toolbar variant="dense" sx={{ minHeight: 56 }}>
           <IconButton
             edge="start"
             color="inherit"
             onClick={() => navigate(dataset ? `/dataset/${dataset.id}` : '/')}
-            sx={{ mr: 2 }}
+            sx={{ mr: 1.5 }}
           >
             <ArrowBack />
           </IconButton>
-          <Box sx={{ flexGrow: 1 }}>
-            <Typography variant="h6">{sheet?.name || 'Sheet'}</Typography>
-            <Typography variant="caption">{dataset?.name}</Typography>
+          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+            <Typography variant="subtitle1" fontWeight={700} noWrap>
+              {sheet?.name || 'Sheet'}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" noWrap component="div">
+              {dataset?.name}
+            </Typography>
           </Box>
         </Toolbar>
       </AppBar>
 
-      <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
+      <Box
+        sx={{
+          flex: 1,
+          minHeight: { xs: 'auto', lg: 0 },
+          p: { xs: 1.5, lg: 2 },
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 1.5,
+        }}
+      >
         {isLoading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+          <Box
+            sx={{
+              flex: 1,
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}
+          >
             <CircularProgress />
           </Box>
         ) : isError ? (
           <Alert severity="error">Unable to load this sheet.</Alert>
         ) : (
-          <Stack spacing={3}>
+          <>
             <SheetSummaryBar
               dataset={dataset}
               sheet={sheet}
@@ -542,7 +593,15 @@ export default function SheetPage() {
               }
             />
 
-            <Stack direction={{ xs: 'column', lg: 'row' }} spacing={3}>
+            <Box
+              sx={{
+                flex: 1,
+                minHeight: { xs: 'auto', lg: 0 },
+                display: 'flex',
+                gap: 1.5,
+                flexDirection: { xs: 'column', lg: 'row' },
+              }}
+            >
               <DataGridPanel
                 rows={rows}
                 columns={columns}
@@ -564,13 +623,57 @@ export default function SheetPage() {
                 }}
               />
 
-              <Paper sx={{ p: 2, width: { xs: '100%', lg: 320 } }}>
-                <Stack spacing={3}>
-                  <Box>
-                    <Typography variant="h6" gutterBottom>
-                      Filters
-                    </Typography>
+              <Paper
+                variant="outlined"
+                sx={{
+                  width: { xs: '100%', lg: 380 },
+                  flexShrink: 0,
+                  height: { xs: 520, lg: '100%' },
+                  minHeight: 0,
+                  overflow: 'hidden',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  borderRadius: 1,
+                  boxShadow: 'none',
+                }}
+              >
+                <Tabs
+                  value={inspectorTab}
+                  onChange={(_, value) => setInspectorTab(value as InspectorTab)}
+                  variant="fullWidth"
+                  sx={{
+                    minHeight: 44,
+                    borderBottom: 1,
+                    borderColor: 'divider',
+                    '& .MuiTab-root': {
+                      minHeight: 44,
+                      minWidth: 0,
+                      px: 0.75,
+                      fontSize: '0.78rem',
+                      textTransform: 'none',
+                      fontWeight: 700,
+                    },
+                  }}
+                >
+                  <Tab value="filters" label="Filters" />
+                  <Tab value="summary" label="Summary" />
+                  <Tab value="fields" label="Fields" />
+                  <Tab value="comments" label="Comments" />
+                  <Tab value="charts" label="Charts" />
+                </Tabs>
+
+                <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto', p: 2 }}>
+                  {inspectorTab === 'filters' && (
                     <Stack spacing={2}>
+                      <Box>
+                        <Typography variant="subtitle1" fontWeight={700}>
+                          Filters
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Narrow the current sheet without leaving the grid.
+                        </Typography>
+                      </Box>
+
                       <FormControl fullWidth size="small">
                         <InputLabel id="filter-column-label">Column</InputLabel>
                         <Select
@@ -593,7 +696,7 @@ export default function SheetPage() {
                       </FormControl>
 
                       <Stack direction="row" spacing={1}>
-                        <FormControl size="small" sx={{ minWidth: 112 }}>
+                        <FormControl size="small" sx={{ width: 118 }}>
                           <InputLabel id="filter-logic-label">Logic</InputLabel>
                           <Select
                             labelId="filter-logic-label"
@@ -657,27 +760,40 @@ export default function SheetPage() {
                       </Stack>
 
                       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                        {filters.map((filter, index) => (
-                          <Chip
-                            key={`${filter.column}-${filter.operator}-${index}`}
-                            label={`${filter.column} ${filter.operator} ${filter.value}`}
-                            onDelete={() => {
-                              setFilters((current) =>
-                                current.filter((_, filterIndex) => filterIndex !== index)
-                              );
-                              setPaginationModel((current) => ({ ...current, page: 0 }));
-                            }}
-                          />
-                        ))}
+                        {filters.length ? (
+                          filters.map((filter, index) => (
+                            <Chip
+                              key={`${filter.column}-${filter.operator}-${index}`}
+                              size="small"
+                              label={`${filter.column} ${filter.operator} ${filter.value}`}
+                              onDelete={() => {
+                                setFilters((current) =>
+                                  current.filter((_, filterIndex) => filterIndex !== index)
+                                );
+                                setPaginationModel((current) => ({ ...current, page: 0 }));
+                              }}
+                            />
+                          ))
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            No filters applied
+                          </Typography>
+                        )}
                       </Stack>
                     </Stack>
-                  </Box>
+                  )}
 
-                  <Box>
-                    <Typography variant="h6" gutterBottom>
-                      Summary
-                    </Typography>
+                  {inspectorTab === 'summary' && (
                     <Stack spacing={2}>
+                      <Box>
+                        <Typography variant="subtitle1" fontWeight={700}>
+                          Summary
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Run aggregate formulas on numeric columns.
+                        </Typography>
+                      </Box>
+
                       <FormControl fullWidth size="small">
                         <InputLabel id="aggregate-column-label">Column</InputLabel>
                         <Select
@@ -700,7 +816,7 @@ export default function SheetPage() {
                       </FormControl>
 
                       <Stack direction="row" spacing={1}>
-                        <FormControl size="small" sx={{ minWidth: 120 }}>
+                        <FormControl size="small" sx={{ width: 132 }}>
                           <InputLabel id="aggregate-operation-label">Operation</InputLabel>
                           <Select
                             labelId="aggregate-operation-label"
@@ -754,7 +870,15 @@ export default function SheetPage() {
                       </Button>
 
                       {aggregateResult && (
-                        <Paper variant="outlined" sx={{ p: 1.5 }}>
+                        <Box
+                          sx={{
+                            p: 1.5,
+                            border: 1,
+                            borderColor: 'divider',
+                            borderRadius: 1,
+                            bgcolor: 'background.default',
+                          }}
+                        >
                           {aggregateResult.group_results ? (
                             <Stack spacing={1}>
                               {aggregateResult.group_results.slice(0, 6).map((row, index) => (
@@ -766,37 +890,71 @@ export default function SheetPage() {
                               ))}
                             </Stack>
                           ) : (
-                            <Typography variant="h6">
+                            <Typography variant="h5" fontWeight={700}>
                               {aggregateResult.result}
                             </Typography>
                           )}
-                        </Paper>
+                        </Box>
                       )}
                     </Stack>
-                  </Box>
+                  )}
 
-                  <Box>
-                    <Typography variant="h6" gutterBottom>
-                      Columns
-                    </Typography>
-                    <Divider />
-                    <List dense>
-                      {schemaColumns.map((column) => (
-                        <ListItem key={column.name} disableGutters>
-                          <ListItemText
-                            primary={column.name}
-                            secondary={`${column.semantic_type} · ${column.type}`}
-                          />
-                        </ListItem>
-                      ))}
-                    </List>
-                  </Box>
+                  {inspectorTab === 'fields' && (
+                    <Stack spacing={2}>
+                      <Box>
+                        <Typography variant="subtitle1" fontWeight={700}>
+                          Fields
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {schemaColumns.length} inferred columns from the dataset.
+                        </Typography>
+                      </Box>
 
-                  <Box>
-                    <Typography variant="h6" gutterBottom>
-                      Collaboration
-                    </Typography>
+                      <TextField
+                        size="small"
+                        label="Search fields"
+                        value={fieldSearch}
+                        onChange={(event) => setFieldSearch(event.target.value)}
+                      />
+
+                      <Divider />
+
+                      <List dense disablePadding>
+                        {filteredSchemaColumns.map((column) => (
+                          <ListItem
+                            key={column.name}
+                            disableGutters
+                            secondaryAction={
+                              <Chip size="small" label={column.semantic_type} />
+                            }
+                          >
+                            <ListItemText
+                              primary={column.name}
+                              secondary={column.type}
+                              primaryTypographyProps={{
+                                variant: 'body2',
+                                noWrap: true,
+                                sx: { fontWeight: 700 },
+                              }}
+                              secondaryTypographyProps={{ variant: 'caption' }}
+                            />
+                          </ListItem>
+                        ))}
+                      </List>
+                    </Stack>
+                  )}
+
+                  {inspectorTab === 'comments' && (
                     <Stack spacing={1.5}>
+                      <Box>
+                        <Typography variant="subtitle1" fontWeight={700}>
+                          Comments
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Attach review notes to the selected cell.
+                        </Typography>
+                      </Box>
+
                       {selectedCell && (
                         <Chip
                           size="small"
@@ -837,10 +995,15 @@ export default function SheetPage() {
                       </Button>
                       <Stack spacing={1}>
                         {displayedComments.map((comment, index) => (
-                          <Paper
+                          <Box
                             key={`${comment.id || comment.timestamp}-${index}`}
-                            variant="outlined"
-                            sx={{ p: 1 }}
+                            sx={{
+                              p: 1,
+                              border: 1,
+                              borderColor: 'divider',
+                              borderRadius: 1,
+                              bgcolor: 'background.default',
+                            }}
                           >
                             <Typography variant="caption" color="text.secondary">
                               {comment.username}
@@ -851,149 +1014,156 @@ export default function SheetPage() {
                                 : ' · sheet'}
                             </Typography>
                             <Typography variant="body2">{comment.text}</Typography>
-                          </Paper>
+                          </Box>
                         ))}
                       </Stack>
                     </Stack>
-                  </Box>
-                </Stack>
-              </Paper>
-            </Stack>
-
-            <Paper sx={{ p: 2 }}>
-              <Stack spacing={3}>
-                <Stack
-                  direction={{ xs: 'column', md: 'row' }}
-                  spacing={2}
-                  alignItems={{ xs: 'stretch', md: 'center' }}
-                >
-                  <Typography variant="h6" sx={{ minWidth: 96 }}>
-                    Charts
-                  </Typography>
-                  <TextField
-                    size="small"
-                    label="Name"
-                    value={chartDraft.name}
-                    onChange={(event) =>
-                      setChartDraft((current) => ({
-                        ...current,
-                        name: event.target.value,
-                      }))
-                    }
-                    sx={{ minWidth: 180 }}
-                  />
-                  <FormControl size="small" sx={{ minWidth: 140 }}>
-                    <InputLabel id="chart-type-label">Type</InputLabel>
-                    <Select
-                      labelId="chart-type-label"
-                      label="Type"
-                      value={chartDraft.chart_type}
-                      onChange={(event) =>
-                        setChartDraft((current) => ({
-                          ...current,
-                          chart_type: event.target.value as ChartCreate['chart_type'],
-                        }))
-                      }
-                    >
-                      {chartTypes.map((type) => (
-                        <MenuItem key={type} value={type}>
-                          {type}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                  <FormControl size="small" sx={{ minWidth: 160 }}>
-                    <InputLabel id="chart-x-label">X field</InputLabel>
-                    <Select
-                      labelId="chart-x-label"
-                      label="X field"
-                      value={String(chartDraft.config.x_axis || '')}
-                      onChange={(event) =>
-                        setChartDraft((current) => ({
-                          ...current,
-                          config: {
-                            ...current.config,
-                            x_axis: event.target.value,
-                            labels: event.target.value,
-                          },
-                        }))
-                      }
-                    >
-                      {schemaColumns.map((column) => (
-                        <MenuItem key={column.name} value={column.name}>
-                          {column.name}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                  <FormControl size="small" sx={{ minWidth: 160 }}>
-                    <InputLabel id="chart-y-label">Y field</InputLabel>
-                    <Select
-                      labelId="chart-y-label"
-                      label="Y field"
-                      value={String(chartDraft.config.y_axis || '')}
-                      onChange={(event) =>
-                        setChartDraft((current) => ({
-                          ...current,
-                          config: {
-                            ...current.config,
-                            y_axis: event.target.value,
-                            values: event.target.value,
-                          },
-                        }))
-                      }
-                    >
-                      {numericColumns.map((column) => (
-                        <MenuItem key={column.name} value={column.name}>
-                          {column.name}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                  <Button
-                    variant="contained"
-                    startIcon={<Save />}
-                    onClick={saveChart}
-                    disabled={!numericColumns.length || createChartMutation.isPending}
-                  >
-                    {createChartMutation.isPending ? 'Saving...' : 'Save Chart'}
-                  </Button>
-                </Stack>
-
-                <Stack direction={{ xs: 'column', lg: 'row' }} spacing={3}>
-                  {previewChart && rows.length > 0 && (
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography variant="subtitle2" gutterBottom>
-                        Preview
-                      </Typography>
-                      <Box sx={{ height: 280 }}>
-                        <ChartPreview chart={previewChart} rows={rows} />
-                      </Box>
-                    </Box>
                   )}
 
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="subtitle2" gutterBottom>
-                      Saved
-                    </Typography>
-                    {charts.length ? (
-                      <Stack spacing={2}>
-                        {charts.map((chart) => (
-                          <SavedChartCard key={chart.id} chart={chart} rows={rows} />
-                        ))}
+                  {inspectorTab === 'charts' && (
+                    <Stack spacing={2}>
+                      <Box>
+                        <Typography variant="subtitle1" fontWeight={700}>
+                          Charts
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Turn selected fields into reusable visuals.
+                        </Typography>
+                      </Box>
+
+                      <TextField
+                        size="small"
+                        label="Name"
+                        value={chartDraft.name}
+                        onChange={(event) =>
+                          setChartDraft((current) => ({
+                            ...current,
+                            name: event.target.value,
+                          }))
+                        }
+                      />
+                      <Stack direction="row" spacing={1}>
+                        <FormControl size="small" sx={{ width: 128 }}>
+                          <InputLabel id="chart-type-label">Type</InputLabel>
+                          <Select
+                            labelId="chart-type-label"
+                            label="Type"
+                            value={chartDraft.chart_type}
+                            onChange={(event) =>
+                              setChartDraft((current) => ({
+                                ...current,
+                                chart_type: event.target.value as ChartCreate['chart_type'],
+                              }))
+                            }
+                          >
+                            {chartTypes.map((type) => (
+                              <MenuItem key={type} value={type}>
+                                {type}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                        <FormControl size="small" sx={{ flex: 1 }}>
+                          <InputLabel id="chart-x-label">X field</InputLabel>
+                          <Select
+                            labelId="chart-x-label"
+                            label="X field"
+                            value={String(chartDraft.config.x_axis || '')}
+                            onChange={(event) =>
+                              setChartDraft((current) => ({
+                                ...current,
+                                config: {
+                                  ...current.config,
+                                  x_axis: event.target.value,
+                                  labels: event.target.value,
+                                },
+                              }))
+                            }
+                          >
+                            {schemaColumns.map((column) => (
+                              <MenuItem key={column.name} value={column.name}>
+                                {column.name}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
                       </Stack>
-                    ) : (
-                      <Typography variant="body2" color="text.secondary">
-                        No saved charts
-                      </Typography>
-                    )}
-                  </Box>
-                </Stack>
-              </Stack>
-            </Paper>
-          </Stack>
+                      <FormControl fullWidth size="small">
+                        <InputLabel id="chart-y-label">Y field</InputLabel>
+                        <Select
+                          labelId="chart-y-label"
+                          label="Y field"
+                          value={String(chartDraft.config.y_axis || '')}
+                          onChange={(event) =>
+                            setChartDraft((current) => ({
+                              ...current,
+                              config: {
+                                ...current.config,
+                                y_axis: event.target.value,
+                                values: event.target.value,
+                              },
+                            }))
+                          }
+                        >
+                          {numericColumns.map((column) => (
+                            <MenuItem key={column.name} value={column.name}>
+                              {column.name}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                      <Button
+                        variant="contained"
+                        startIcon={<Save />}
+                        onClick={saveChart}
+                        disabled={!numericColumns.length || createChartMutation.isPending}
+                      >
+                        {createChartMutation.isPending ? 'Saving...' : 'Save Chart'}
+                      </Button>
+
+                      {previewChart && rows.length > 0 && (
+                        <Box>
+                          <Typography variant="subtitle2" gutterBottom>
+                            Preview
+                          </Typography>
+                          <Box
+                            sx={{
+                              height: 220,
+                              border: 1,
+                              borderColor: 'divider',
+                              borderRadius: 1,
+                              p: 1,
+                            }}
+                          >
+                            <ChartPreview chart={previewChart} rows={rows} />
+                          </Box>
+                        </Box>
+                      )}
+
+                      <Box>
+                        <Typography variant="subtitle2" gutterBottom>
+                          Saved
+                        </Typography>
+                        {charts.length ? (
+                          <Stack spacing={1.5}>
+                            {charts.map((chart) => (
+                              <SavedChartCard key={chart.id} chart={chart} rows={rows} />
+                            ))}
+                          </Stack>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            No saved charts
+                          </Typography>
+                        )}
+                      </Box>
+                    </Stack>
+                  )}
+                </Box>
+              </Paper>
+            </Box>
+          </>
         )}
-      </Container>
+      </Box>
     </Box>
   );
 }

@@ -38,19 +38,30 @@ export function SheetSummaryBar({
   canExport: boolean;
 }) {
   return (
-    <Paper sx={{ p: 2 }}>
+    <Paper
+      variant="outlined"
+      sx={{
+        px: 2,
+        py: 1.5,
+        borderRadius: 1,
+        boxShadow: 'none',
+      }}
+    >
       <Stack
         direction={{ xs: 'column', md: 'row' }}
-        spacing={2}
+        spacing={1.25}
         alignItems={{ xs: 'flex-start', md: 'center' }}
+        flexWrap="wrap"
+        useFlexGap
       >
-        <Chip icon={<Dataset />} label={dataset?.file_name || 'Dataset'} />
-        <Chip label={rowCountLabel} />
-        <Chip label={`${dataset?.column_count || 0} columns`} />
-        <Chip icon={<TableChart />} label="Saved sheet" color="primary" />
-        <Chip icon={<People />} label={`${activeCount} active`} variant="outlined" />
+        <Chip size="small" icon={<Dataset />} label={dataset?.file_name || 'Dataset'} />
+        <Chip size="small" label={rowCountLabel} />
+        <Chip size="small" label={`${dataset?.column_count || 0} columns`} />
+        <Chip size="small" icon={<TableChart />} label="Saved sheet" color="primary" />
+        <Chip size="small" icon={<People />} label={`${activeCount} active`} variant="outlined" />
         {filterCount > 0 && (
           <Chip
+            size="small"
             icon={<FilterAlt />}
             label={`${filterCount} active filter${filterCount === 1 ? '' : 's'}`}
             color="secondary"
@@ -61,6 +72,7 @@ export function SheetSummaryBar({
           startIcon={<Save />}
           disabled={!sheet || saving}
           onClick={onSave}
+          size="small"
         >
           {saving ? 'Saving...' : 'Save View'}
         </Button>
@@ -69,6 +81,7 @@ export function SheetSummaryBar({
           startIcon={<FileDownload />}
           disabled={!canExport}
           onClick={onExport}
+          size="small"
         >
           Export CSV
         </Button>
@@ -107,7 +120,17 @@ export function DataGridPanel({
   onCellSelect: (rowIndex: number, column: string) => void;
 }) {
   return (
-    <Paper sx={{ height: 660, flex: 1, minWidth: 0 }}>
+    <Paper
+      variant="outlined"
+      sx={{
+        height: { xs: 560, lg: '100%' },
+        flex: 1,
+        minWidth: 0,
+        overflow: 'hidden',
+        borderRadius: 1,
+        boxShadow: 'none',
+      }}
+    >
       <DataGrid
         rows={rows}
         columns={columns}
@@ -120,6 +143,21 @@ export function DataGridPanel({
         pageSizeOptions={[10, 25, 50, 100]}
         processRowUpdate={processRowUpdate}
         onProcessRowUpdateError={onProcessRowUpdateError}
+        density="compact"
+        rowHeight={42}
+        columnHeaderHeight={44}
+        sx={{
+          border: 0,
+          '& .MuiDataGrid-columnHeaders': {
+            backgroundColor: 'grey.50',
+          },
+          '& .MuiDataGrid-cell': {
+            borderColor: 'grey.200',
+          },
+          '& .MuiDataGrid-footerContainer': {
+            minHeight: 46,
+          },
+        }}
         onCellClick={(params) => {
           const rowIndex = Number(params.row.__source_index ?? params.row.__row_id);
           onCellSelect(rowIndex, params.field);

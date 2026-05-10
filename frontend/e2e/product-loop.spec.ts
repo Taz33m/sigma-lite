@@ -102,11 +102,13 @@ test('core product loop: auth, upload, sheet, edit, filter, chart, comment, expo
   await page.getByRole('button', { name: /^add$/i }).click();
   await expect(page.getByText(/1 active filter/i)).toBeVisible();
 
-  await page.getByLabel('Column').nth(1).click();
+  await page.getByRole('tab', { name: 'Summary' }).click();
+  await page.getByLabel('Column').click();
   await page.getByRole('option', { name: 'age' }).click();
   await page.getByRole('button', { name: /^run$/i }).click();
   await expect(page.getByText('95')).toBeVisible();
 
+  await page.getByRole('tab', { name: 'Charts' }).click();
   await page.getByRole('textbox', { name: 'Name' }).fill('Age by city');
   await page.getByLabel('X field').click();
   await page.getByRole('option', { name: 'city' }).click();
@@ -117,6 +119,7 @@ test('core product loop: auth, upload, sheet, edit, filter, chart, comment, expo
   await expect(page.getByText('Age by city')).toBeVisible();
 
   await page.getByRole('cell', { name: 'LA' }).first().click();
+  await page.getByRole('tab', { name: 'Comments' }).click();
   await page.getByLabel('Comment').fill('Check this filtered cell');
   await page.getByRole('button', { name: /^send$/i }).click();
   await expect(page.getByText('Check this filtered cell')).toBeVisible();
@@ -127,5 +130,6 @@ test('core product loop: auth, upload, sheet, edit, filter, chart, comment, expo
   expect(file.suggestedFilename()).toContain('current-page.csv');
 
   await page.reload();
+  await page.getByRole('tab', { name: 'Comments' }).click();
   await expect(page.getByText('Check this filtered cell')).toBeVisible();
 });
