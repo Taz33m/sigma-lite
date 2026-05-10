@@ -163,8 +163,6 @@ Core responsibilities:
 - `backend/`: FastAPI routes, JWT auth, owner-scoped resources, upload
   validation, pandas data processing, cell persistence, sheet/chart/comment
   models, Alembic migrations, config guardrails, and WebSocket broadcasts.
-- `hyperframes/sigmalite-blueprint/`: source for the cinematic product trailer.
-  Rendered MP4 artifacts stay local under ignored `renders/`.
 
 More detail: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
@@ -250,8 +248,6 @@ Try these in an editable cell:
 | `cd frontend && npm run build` | Typecheck and build the frontend |
 | `cd frontend && npm run test:e2e -- --project=chromium` | Run the Playwright product loop |
 | `cd frontend && npm run dev` | Start the Vite app |
-| `cd hyperframes/sigmalite-blueprint && npm run check` | Validate the trailer composition |
-| `cd hyperframes/sigmalite-blueprint && npm run render -- --output renders/sigmalite-blueprint-v2.mp4 --quality standard` | Render the local trailer MP4 |
 
 ## API Surface
 
@@ -320,8 +316,6 @@ and troubleshooting.
 ```text
 backend/                    FastAPI app, SQLAlchemy models, Alembic migrations, pytest suite
 frontend/                   React/Vite app, MUI workspace, Vitest tests, Playwright E2E
-hyperframes/sigmalite-blueprint/
-                            HyperFrames trailer source and reproducible audio assets
 docs/                       Architecture, development, roadmap, PRD, auth-bypass notes
 .github/workflows/          CI for backend, frontend, migration smoke, and E2E
 CONTRIBUTING.md             Contributor workflow
