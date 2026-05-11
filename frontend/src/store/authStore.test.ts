@@ -13,7 +13,7 @@ const mockUser: User = {
 
 describe('authStore', () => {
   beforeEach(() => {
-    useAuthStore.setState({ user: null, isAuthenticated: false });
+    useAuthStore.setState({ user: null, isAuthenticated: false, authReady: false });
     localStorage.clear();
   });
 
@@ -21,6 +21,7 @@ describe('authStore', () => {
     const state = useAuthStore.getState();
     expect(state.user).toBeNull();
     expect(state.isAuthenticated).toBe(false);
+    expect(state.authReady).toBe(false);
   });
 
   it('marks the user authenticated when setUser is called', () => {
@@ -38,6 +39,7 @@ describe('authStore', () => {
     const state = useAuthStore.getState();
     expect(state.user).toBeNull();
     expect(state.isAuthenticated).toBe(false);
+    expect(state.authReady).toBe(true);
     expect(localStorage.getItem('access_token')).toBeNull();
     expect(localStorage.getItem('refresh_token')).toBeNull();
   });
@@ -46,5 +48,10 @@ describe('authStore', () => {
     useAuthStore.getState().setUser(mockUser);
     useAuthStore.getState().setUser(null);
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
+  });
+
+  it('tracks verified auth bootstrap readiness separately from persisted state', () => {
+    useAuthStore.getState().setAuthReady(true);
+    expect(useAuthStore.getState().authReady).toBe(true);
   });
 });

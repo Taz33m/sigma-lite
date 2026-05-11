@@ -83,6 +83,29 @@ class ConnectionManager:
             await websocket.send_text(json.dumps(message))
         except Exception:
             self.disconnect(websocket)
+
+    async def disconnect_user_from_sheet(
+        self,
+        sheet_id: int,
+        user_id: int,
+        reason: str = "Sheet access was revoked",
+    ) -> None:
+        """Close active connections for a user whose sheet access changed."""
+        connections = [
+            websocket
+            for websocket, info in list(self.connection_info.items())
+            if info["sheet_id"] == sheet_id and info["user_id"] == user_id
+        ]
+        for websocket in connections:
+            await self.send_personal_message(
+                websocket,
+                {"type": "access_revoked", "reason": reason},
+            )
+            try:
+                await websocket.close(code=1008, reason=reason)
+            except Exception:
+                pass
+            self.disconnect(websocket)
     
     def get_active_users(self, sheet_id: int) -> list:
         """Get list of active users in a sheet."""

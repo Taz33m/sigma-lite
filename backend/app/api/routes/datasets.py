@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, File, Form, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import os
@@ -9,18 +9,65 @@ from pathlib import Path
 import pandas as pd
 from app.core.database import get_db
 from app.core.config import settings
-from app.core.rate_limit import check_upload_rate_limit
+from app.core.rate_limit import (
+    check_cell_edit_rate_limit,
+    check_mutation_rate_limit,
+    check_query_rate_limit,
+    check_upload_rate_limit,
+)
 from app.api.deps import get_current_user
 from app.models.user import User
-from app.models.dataset import Dataset as DatasetModel
+from app.models.dataset import (
+    Dataset as DatasetModel,
+    Sheet as SheetModel,
+    SheetShare as SheetShareModel,
+)
 from app.schemas.dataset import (
     Dataset, DatasetCreate, DatasetUpdate, DatasetData,
     FilterQuery, AggregateRequest, AggregateResult, CellUpdateRequest,
+    DatasetQuery,
     CellUpdateResult
 )
 from app.services.data_processor import DataProcessor
+from app.services.audit import record_audit_event
+from app.services.dataset_store import (
+    CellConflictError,
+    QuerySpec,
+    aggregate_dataset as aggregate_stored_dataset,
+    ensure_db_storage,
+    ingest_dataframe,
+    query_dataset,
+    update_cell as update_stored_cell,
+)
 
 router = APIRouter()
+
+
+def _get_accessible_dataset(
+    db: Session,
+    dataset_id: int,
+    current_user: User,
+    require_owner: bool = False,
+    allow_shared_sheet_metadata: bool = False,
+) -> DatasetModel:
+    dataset = db.query(DatasetModel).filter(DatasetModel.id == dataset_id).first()
+    if not dataset:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found")
+    if dataset.owner_id == current_user.id:
+        return dataset
+    if not require_owner and allow_shared_sheet_metadata:
+        shared_sheet = (
+            db.query(SheetModel.id)
+            .outerjoin(SheetShareModel, SheetShareModel.sheet_id == SheetModel.id)
+            .filter(
+                SheetModel.dataset_id == dataset_id,
+                SheetShareModel.user_id == current_user.id,
+            )
+            .first()
+        )
+        if shared_sheet:
+            return dataset
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found")
 
 
 @router.post(
@@ -33,6 +80,7 @@ async def upload_dataset(
     name: str = Form(...),
     description: Optional[str] = Form(None),
     file: UploadFile = File(...),
+    request: Request = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -88,6 +136,17 @@ async def upload_dataset(
         )
         
         db.add(dataset)
+        db.flush()
+        ingest_dataframe(db, dataset, df, current_user.id)
+        record_audit_event(
+            db,
+            "dataset.uploaded",
+            "dataset",
+            dataset.id,
+            current_user,
+            {"row_count": len(df), "column_count": len(df.columns), "file_name": original_filename},
+            request,
+        )
         db.commit()
         db.refresh(dataset)
         
@@ -133,21 +192,19 @@ def get_dataset(
     current_user: User = Depends(get_current_user)
 ):
     """Get a specific dataset."""
-    dataset = db.query(DatasetModel).filter(
-        DatasetModel.id == dataset_id,
-        DatasetModel.owner_id == current_user.id
-    ).first()
-    
-    if not dataset:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dataset not found"
-        )
-    
-    return dataset
+    return _get_accessible_dataset(
+        db,
+        dataset_id,
+        current_user,
+        allow_shared_sheet_metadata=True,
+    )
 
 
-@router.get("/{dataset_id}/data", response_model=DatasetData)
+@router.get(
+    "/{dataset_id}/data",
+    response_model=DatasetData,
+    dependencies=[Depends(check_query_rate_limit)],
+)
 def get_dataset_data(
     dataset_id: int,
     page: int = Query(default=1, ge=1),
@@ -156,23 +213,14 @@ def get_dataset_data(
     current_user: User = Depends(get_current_user)
 ):
     """Get dataset data with pagination."""
-    dataset = db.query(DatasetModel).filter(
-        DatasetModel.id == dataset_id,
-        DatasetModel.owner_id == current_user.id
-    ).first()
-    
-    if not dataset:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dataset not found"
-        )
+    dataset = _get_accessible_dataset(db, dataset_id, current_user)
     
     try:
-        processor = DataProcessor()
-        df = processor.read_csv(dataset.file_path)
-        result = processor.get_data_page(df, page, page_size)
-        
-        return result
+        return query_dataset(
+            db,
+            dataset,
+            QuerySpec(filters=[], page=page, page_size=page_size),
+        )
     
     except Exception as e:
         raise HTTPException(
@@ -181,7 +229,11 @@ def get_dataset_data(
         )
 
 
-@router.post("/{dataset_id}/filter", response_model=DatasetData)
+@router.post(
+    "/{dataset_id}/filter",
+    response_model=DatasetData,
+    dependencies=[Depends(check_query_rate_limit)],
+)
 def filter_dataset(
     dataset_id: int,
     filter_query: FilterQuery,
@@ -189,33 +241,20 @@ def filter_dataset(
     current_user: User = Depends(get_current_user)
 ):
     """Filter dataset data."""
-    dataset = db.query(DatasetModel).filter(
-        DatasetModel.id == dataset_id,
-        DatasetModel.owner_id == current_user.id
-    ).first()
-    
-    if not dataset:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dataset not found"
-        )
+    dataset = _get_accessible_dataset(db, dataset_id, current_user)
     
     try:
-        processor = DataProcessor()
-        df = processor.read_csv(dataset.file_path)
-        
-        # Apply filters
         filters = [f.model_dump() for f in filter_query.filters]
-        filtered_df = processor.apply_filters(df, filters, filter_query.logic)
-        
-        # Get paginated result
-        result = processor.get_data_page(
-            filtered_df,
-            filter_query.page,
-            filter_query.page_size
+        return query_dataset(
+            db,
+            dataset,
+            QuerySpec(
+                filters=filters,
+                logic=filter_query.logic,
+                page=filter_query.page,
+                page_size=filter_query.page_size,
+            ),
         )
-        
-        return result
     
     except ValueError as e:
         raise HTTPException(
@@ -229,7 +268,11 @@ def filter_dataset(
         )
 
 
-@router.post("/{dataset_id}/aggregate", response_model=AggregateResult)
+@router.post(
+    "/{dataset_id}/aggregate",
+    response_model=AggregateResult,
+    dependencies=[Depends(check_query_rate_limit)],
+)
 def aggregate_dataset(
     dataset_id: int,
     agg_request: AggregateRequest,
@@ -237,26 +280,17 @@ def aggregate_dataset(
     current_user: User = Depends(get_current_user)
 ):
     """Aggregate dataset data."""
-    dataset = db.query(DatasetModel).filter(
-        DatasetModel.id == dataset_id,
-        DatasetModel.owner_id == current_user.id
-    ).first()
-    
-    if not dataset:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dataset not found"
-        )
+    dataset = _get_accessible_dataset(db, dataset_id, current_user)
     
     try:
-        processor = DataProcessor()
-        df = processor.read_csv(dataset.file_path)
-        
-        result = processor.aggregate(
-            df,
+        result = aggregate_stored_dataset(
+            db,
+            dataset,
             agg_request.column,
             agg_request.operation,
-            agg_request.group_by
+            agg_request.group_by,
+            [filter_item.model_dump() for filter_item in agg_request.filters],
+            agg_request.logic,
         )
         
         return result
@@ -273,14 +307,19 @@ def aggregate_dataset(
         )
 
 
-@router.patch("/{dataset_id}/cell", response_model=CellUpdateResult)
+@router.patch(
+    "/{dataset_id}/cell",
+    response_model=CellUpdateResult,
+    dependencies=[Depends(check_cell_edit_rate_limit)],
+)
 def update_dataset_cell(
     dataset_id: int,
     cell_update: CellUpdateRequest,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Update a single dataset cell and persist it to the CSV backing file."""
+    """Compatibility endpoint for owner-scoped cell updates."""
     dataset = db.query(DatasetModel).filter(
         DatasetModel.id == dataset_id,
         DatasetModel.owner_id == current_user.id
@@ -293,27 +332,56 @@ def update_dataset_cell(
         )
 
     try:
-        processor = DataProcessor()
-        df = processor.read_csv(dataset.file_path)
-        df, stored_value = processor.update_cell(
-            df,
+        result = update_stored_cell(
+            db,
+            dataset,
             cell_update.row_index,
             cell_update.column,
-            cell_update.value
+            cell_update.value,
+            current_user.id,
+            cell_update.expected_version,
+            cell_update.force,
         )
-        df.to_csv(dataset.file_path, index=False)
-
-        dataset.file_size = Path(dataset.file_path).stat().st_size
-        dataset.row_count = len(df)
-        dataset.column_count = len(df.columns)
-        dataset.schema = processor.infer_schema(df)
+        record_audit_event(
+            db,
+            "cell.updated",
+            "dataset",
+            dataset_id,
+            current_user,
+            {
+                "row_index": cell_update.row_index,
+                "column": cell_update.column,
+                "version": result.get("version"),
+                "forced": cell_update.force,
+            },
+            request,
+        )
         db.commit()
 
-        return {
-            "row_index": cell_update.row_index,
-            "column": cell_update.column,
-            "value": stored_value
-        }
+        return result
+
+    except CellConflictError as e:
+        record_audit_event(
+            db,
+            "cell.conflict",
+            "dataset",
+            dataset_id,
+            current_user,
+            {"row_index": e.row_index, "column": e.column, "current_version": e.current_version},
+            request,
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": str(e),
+                "row_index": e.row_index,
+                "column": e.column,
+                "current_value": e.current_value,
+                "current_version": e.current_version,
+                "attempted_value": e.attempted_value,
+            },
+        )
 
     except ValueError as e:
         raise HTTPException(
@@ -327,10 +395,15 @@ def update_dataset_cell(
         )
 
 
-@router.put("/{dataset_id}", response_model=Dataset)
+@router.put(
+    "/{dataset_id}",
+    response_model=Dataset,
+    dependencies=[Depends(check_mutation_rate_limit)],
+)
 def update_dataset(
     dataset_id: int,
     dataset_update: DatasetUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -349,6 +422,15 @@ def update_dataset(
     update_data = dataset_update.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(dataset, field, value)
+    record_audit_event(
+        db,
+        "dataset.updated",
+        "dataset",
+        dataset_id,
+        current_user,
+        {"fields": sorted(update_data.keys())},
+        request,
+    )
     
     db.commit()
     db.refresh(dataset)
@@ -356,9 +438,14 @@ def update_dataset(
     return dataset
 
 
-@router.delete("/{dataset_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{dataset_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(check_mutation_rate_limit)],
+)
 def delete_dataset(
     dataset_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -379,8 +466,48 @@ def delete_dataset(
     if file_path.exists():
         file_path.unlink()
     
+    record_audit_event(
+        db,
+        "dataset.deleted",
+        "dataset",
+        dataset_id,
+        current_user,
+        {"name": dataset.name, "file_name": dataset.file_name, "row_count": dataset.row_count},
+        request,
+    )
+
     # Delete database record
     db.delete(dataset)
     db.commit()
     
     return None
+
+
+@router.post(
+    "/{dataset_id}/query",
+    response_model=DatasetData,
+    dependencies=[Depends(check_query_rate_limit)],
+)
+def query_dataset_data(
+    dataset_id: int,
+    dataset_query: DatasetQuery,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Query dataset rows with server-side filters, sorting, and pagination."""
+    dataset = _get_accessible_dataset(db, dataset_id, current_user)
+
+    try:
+        return query_dataset(
+            db,
+            dataset,
+            QuerySpec(
+                filters=[item.model_dump() for item in dataset_query.filters],
+                logic=dataset_query.logic,
+                sort=dataset_query.sort.model_dump() if dataset_query.sort else None,
+                page=dataset_query.page,
+                page_size=dataset_query.page_size,
+            ),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

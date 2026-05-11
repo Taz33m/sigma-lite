@@ -57,8 +57,16 @@ class RefreshTokenRequest(BaseModel):
     token: str
 
 
+class LogoutRequest(BaseModel):
+    """Schema for refresh-token revocation."""
+    refresh_token: Optional[str] = None
+    all_sessions: bool = False
+
+
 class TokenPayload(BaseModel):
     """Schema for token payload."""
     sub: Optional[str] = None
     exp: Optional[int] = None
     type: Optional[str] = None
+    jti: Optional[str] = None
+    family_id: Optional[str] = None

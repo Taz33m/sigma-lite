@@ -37,9 +37,10 @@ Restart both servers after changing these.
 - All datasets, sheets, and charts are owned by that demo user.
 
 ### Frontend
+- On app load, the frontend still calls `/api/auth/me` and hydrates the
+  backend demo user. Protected routes wait for that verified response before
+  rendering.
 - The `/login` and `/register` pages are still reachable but unnecessary.
-- Protected routes do not redirect; you can navigate straight to the
-  dashboard.
 
 ## Default
 
@@ -57,6 +58,8 @@ double-check your `.env`.
 | Full name  | `Demo User`          |
 
 The demo user is created on the first request after the flag is enabled.
+It is not a password-login account in normal auth mode; use the register form
+or create a real local user when `DISABLE_AUTH=False`.
 
 ## Re-enabling normal auth
 
