@@ -59,8 +59,8 @@ viewer/editor roles, and export filtered data or a PDF report.
 
 ## Public-Beta Success Criteria
 
-- Auth is enabled by default; staging/production reject disabled auth, weak
-  secrets, wildcard CORS, and non-Redis rate limiting.
+- Auth is enabled by default; `selfhosted`, staging, and production modes reject
+  disabled auth, weak secrets, wildcard CORS, and non-Redis rate limiting.
 - No bearer, access, or refresh token is placed in a WebSocket URL.
 - Old refresh tokens cannot be reused after rotation.
 - Viewers cannot edit cells, manage shares, or enumerate collaborator emails.

@@ -13,8 +13,8 @@ see the top-level [`README.md`](../README.md).
 | Node.js   | 22 recommended | Matches CI for the Vite/React frontend          |
 | Python    | 3.11+   | For the FastAPI backend                               |
 | SQLite    | bundled | Default local DB — no install required                |
-| PostgreSQL | 14+    | Optional; recommended for production                  |
-| Redis     | any     | Optional locally; required for staging/production rate limits |
+| PostgreSQL | 14+    | Optional; recommended for self-hosted/public use      |
+| Redis     | any     | Optional locally; required for `selfhosted`/staging/production rate limits |
 
 ### Backend
 
@@ -47,8 +47,8 @@ frontend origin to `ALLOWED_ORIGINS`.
 
 ## Switching to PostgreSQL
 
-SQLite is great for local work but lacks the concurrency story you want in
-production. To switch:
+SQLite is great for local work but lacks the concurrency story you want for a
+serious self-hosted/public instance. To switch:
 
 1. Provision a Postgres database (locally with `createdb sigmalite` or via a
    managed service).
@@ -124,24 +124,24 @@ Expected tables after a fresh upgrade: `users`, `datasets`, `dataset_columns`,
 `sheet_shares`, `audit_events`, `refresh_tokens`, `websocket_tickets`, and
 `alembic_version`.
 
-## Production deployment
+## Self-hosted deployment
 
 ### Backend (Render or similar)
 
 1. Build command: `pip install -r requirements.txt`
 2. Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 3. Required env vars:
-   - `DATABASE_URL` — production Postgres URL
+   - `DATABASE_URL` — Postgres URL
    - `SECRET_KEY` — long random string, at least 32 characters
    - `ALLOWED_ORIGINS` — comma-separated list of frontend origins
-   - `ENVIRONMENT=production` or `ENVIRONMENT=staging`
+   - `ENVIRONMENT=selfhosted`, `ENVIRONMENT=staging`, or `ENVIRONMENT=production`
    - `DISABLE_AUTH=False`
    - `RATE_LIMIT_BACKEND=redis`
    - `REDIS_URL` — managed Redis URL
 4. Run `alembic upgrade head` as a release task on each deploy.
 
-Staging/production mode rejects weak/default `SECRET_KEY`, wildcard CORS,
-`DISABLE_AUTH=True`, and non-Redis rate limiting.
+`selfhosted`, staging, and production modes reject weak/default `SECRET_KEY`,
+wildcard CORS, `DISABLE_AUTH=True`, and non-Redis rate limiting.
 
 ### Frontend (Vercel or similar)
 
@@ -150,7 +150,7 @@ cd frontend
 npm run build           # outputs to dist/
 ```
 
-Set `VITE_API_URL` to the production backend origin in the host's environment
+Set `VITE_API_URL` to the backend origin in the host's environment
 settings, then deploy.
 
 ## Troubleshooting
@@ -191,9 +191,9 @@ cosmetic warning changes.
 
 ## Deployment smoke checklist
 
-- `alembic upgrade head` succeeds against the production database.
+- `alembic upgrade head` succeeds against the self-hosted/public database.
 - `/health/ready` returns ready.
-- Register/login/refresh works with production `SECRET_KEY`.
+- Register/login/refresh works with the deployed `SECRET_KEY`.
 - Upload a CSV and open the dataset page.
 - Create a sheet, edit a cell, apply a filter, run an aggregation, save a chart.
 - Add a comment and reload to confirm persistence.

@@ -1,22 +1,23 @@
 # Operations Runbook
 
-SigmaLite's public-beta posture assumes:
+SigmaLite's public-beta posture is self-hosted first. For internet-reachable
+instances, assume:
 
 - Frontend on Vercel or equivalent static hosting.
 - Backend on Render or equivalent FastAPI service.
 - PostgreSQL for `DATABASE_URL`.
 - Redis for distributed rate limiting.
-- `api.<domain>` proxied through Cloudflare before it reaches Render.
+- Optional API-edge protection such as Cloudflare in front of the backend.
 
 ## Health, Logs, And Metrics
 
 - Use `/health/live` for process liveness.
 - Use `/health/ready` for Render health checks because it verifies database connectivity.
 - Use `/metrics` for lightweight Prometheus-style request counters and latency totals.
-  Local/test expose it publicly; staging/production require `METRICS_TOKEN` or
-  explicit `EXPOSE_PUBLIC_METRICS=True`.
+  Local/test expose it publicly; `selfhosted`, staging, and production require
+  `METRICS_TOKEN` or explicit `EXPOSE_PUBLIC_METRICS=True`.
 - API docs (`/docs`, `/redoc`, `/openapi.json`) are enabled locally but hidden
-  in staging/production unless `EXPOSE_API_DOCS=True`.
+  in `selfhosted`, staging, and production unless `EXPOSE_API_DOCS=True`.
 - Backend request logs are structured JSON and include `request_id`, `CF-Ray`, `Rndr-Id`, method, path, status, duration, actor id, and client host.
 - Set `ENABLE_OTEL=True` only when OpenTelemetry FastAPI instrumentation is installed in the runtime image.
 
@@ -38,6 +39,11 @@ Render setup:
   DB row/cell storage remains authoritative after ingest, but attach durable
   storage or move artifacts to object storage before promising source-file
   retention.
+- The `b4d7a2c9e830` migration creates large-delete support indexes for
+  SQLite/test databases and lightweight Postgres tables. For existing Postgres
+  beta databases with a large `dataset_cells` table, build the
+  `ix_dataset_cells_row_id` and `ix_dataset_cells_column_id` indexes during a
+  planned maintenance window instead of during web-service startup.
 
 Blueprint deploy flow:
 
@@ -128,9 +134,10 @@ API Shield note:
 
 ## App Rate Limits
 
-The backend uses Redis sorted-set sliding windows in production
-(`RATE_LIMIT_BACKEND=redis`). Local/test can use `auto` or `memory`; `auto`
-falls back to in-memory sliding windows when Redis is unavailable.
+The backend uses Redis sorted-set sliding windows in `selfhosted`, staging, and
+production modes (`RATE_LIMIT_BACKEND=redis`). Local/test can use `auto` or
+`memory`; `auto` falls back to in-memory sliding windows when Redis is
+unavailable.
 
 Defaults:
 
@@ -146,7 +153,7 @@ Defaults:
 Blocked requests return `429` and write `rate_limit.blocked` audit events with
 the limiter scope, path, method, limit, and window size.
 
-For production, set:
+For self-hosted/public instances, set:
 
 ```env
 RATE_LIMIT_BACKEND=redis

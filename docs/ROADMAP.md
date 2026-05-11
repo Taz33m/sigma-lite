@@ -5,10 +5,10 @@ pass. It is not a promise of delivery dates.
 
 ## Beta Stabilization
 
-- Staging deployment and smoke verification.
+- Self-hosted/staging deployment and smoke verification.
 - More frontend component coverage for the sheet workspace.
-- Capture staging benchmark results for 100k/250k rows before making public
-  performance claims.
+- Capture self-hosted/staging benchmark results for 100k/250k rows before
+  making public performance claims.
 
 ## Collaboration
 
@@ -29,10 +29,8 @@ pass. It is not a promise of delivery dates.
 - Formula dependency graph visualization.
 - Broader recalculation coverage for complex dependency chains.
 
-## Production Operations
+## Self-Hosted Operations
 
-- Trial Cloudflare API Shield schema validation in log mode using the OpenAPI
-  3.0 export.
-- Live Render/Vercel/Cloudflare deployment validation after the final
-  host/domain is selected.
-- SLO and alert policy definition after staging metrics are captured.
+- Trial API-edge schema validation in log mode using the OpenAPI 3.0 export.
+- Live self-hosted deployment validation after the final host/domain is selected.
+- Alert policy definition after self-hosted/staging metrics are captured.

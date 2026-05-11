@@ -68,9 +68,18 @@ class Settings(BaseSettings):
     def _validate_environment_settings(self) -> None:
         """Reject unknown or unsafe settings before serving public traffic."""
         environment = self.ENVIRONMENT.lower()
-        allowed_environments = {"development", "test", "testing", "staging", "production"}
+        allowed_environments = {
+            "development",
+            "test",
+            "testing",
+            "staging",
+            "selfhosted",
+            "production",
+        }
         if environment not in allowed_environments:
-            raise ValueError("ENVIRONMENT must be one of development, test, staging, production")
+            raise ValueError(
+                "ENVIRONMENT must be one of development, test, staging, selfhosted, production"
+            )
 
         unsafe_secret_values = {
             "change-me",
@@ -95,7 +104,7 @@ class Settings(BaseSettings):
                 raise ValueError("RATE_LIMIT_BACKEND must be redis in public environments")
 
     def is_public_environment(self) -> bool:
-        return self.ENVIRONMENT.lower() in {"production", "staging"}
+        return self.ENVIRONMENT.lower() in {"production", "staging", "selfhosted"}
 
     def api_docs_enabled(self) -> bool:
         return not self.is_public_environment() or self.EXPOSE_API_DOCS

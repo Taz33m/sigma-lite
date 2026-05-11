@@ -139,7 +139,7 @@ loop.
 | Migration smoke | Fresh Alembic upgrade checks expected tables including dataset row/cell storage, shares, audit events, refresh tokens, WebSocket tickets, and `alembic_version` |
 | Production build | ESLint, TypeScript, and Vite build in CI |
 | Dependency audit | `pip-audit -r backend/requirements.txt` and `npm audit --omit=dev --audit-level=moderate` in CI |
-| Deployment artifacts | `render.yaml` Blueprint for the FastAPI service, Postgres, Redis, readiness health check, and migration-on-start; `frontend/vercel.json` for the Vite SPA; deployed API smoke script in `backend/load/staging_smoke.py` |
+| Self-hosting artifacts | Render/Vercel examples for the FastAPI service, Postgres, Redis, readiness health check, and Vite SPA; deployed API smoke script in `backend/load/staging_smoke.py` |
 
 See [`PRD_COMPLIANCE.md`](PRD_COMPLIANCE.md) for the current feature matrix and
 beta limits.
@@ -154,7 +154,7 @@ flowchart LR
     C --> D
     D --> E["pandas data processor"]
     D --> F["SQLAlchemy models"]
-    F --> G["SQLite local / PostgreSQL production"]
+    F --> G["SQLite local / PostgreSQL self-hosted"]
     E --> H["Uploaded CSV files"]
     I["Alembic migrations"] --> G
     J["Playwright + pytest + Vitest"] --> A
@@ -182,7 +182,7 @@ More detail: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 | Node.js | 22 recommended | Matches CI and Playwright setup |
 | npm | Bundled with Node | Frontend dependency manager |
 | SQLite | Bundled with Python | Default local database |
-| PostgreSQL | 14+ optional | Recommended production database |
+| PostgreSQL | 14+ optional | Recommended self-hosted/public database |
 
 ### Backend
 
@@ -260,7 +260,7 @@ Try these in an editable cell:
 
 | Endpoint | Method | Purpose |
 | --- | --- | --- |
-| `/health`, `/health/live`, `/health/ready`, `/metrics` | `GET` | Service health/readiness and lightweight metrics; `/metrics` requires `METRICS_TOKEN` or explicit public exposure in staging/production |
+| `/health`, `/health/live`, `/health/ready`, `/metrics` | `GET` | Service health/readiness and lightweight metrics; `/metrics` requires `METRICS_TOKEN` or explicit public exposure in `selfhosted`, staging, or production mode |
 | `/api/auth/register` | `POST` | Create user |
 | `/api/auth/login` | `POST` | Issue access and refresh tokens |
 | `/api/auth/refresh` | `POST` | Rotate tokens |
@@ -311,19 +311,21 @@ VITE_DISABLE_AUTH=false
 If you run Vite on a different host or port, add that exact frontend origin
 to `ALLOWED_ORIGINS`.
 
-Staging and production mode reject unsafe combinations such as weak/default
-secrets, wildcard CORS, non-Redis rate limiting, and `DISABLE_AUTH=True`.
+`selfhosted`, staging, and production modes reject unsafe combinations such as
+weak/default secrets, wildcard CORS, non-Redis rate limiting, and
+`DISABLE_AUTH=True`.
 
-## Production Posture
+## Self-Hosted Public Posture
 
-For production, run SigmaLite as separate frontend and backend services:
+For a serious self-hosted/public instance, run SigmaLite as separate frontend
+and backend services:
 
 - PostgreSQL for `DATABASE_URL`.
 - Durable upload storage or a mounted persistent disk for uploaded CSVs.
 - Strong `SECRET_KEY` managed by the hosting platform.
 - Explicit `ALLOWED_ORIGINS`.
 - HTTPS termination at the platform or load balancer.
-- Cloudflare-proxied API domain with WAF/rate limiting in front of the API.
+- Optional Cloudflare or equivalent API-edge WAF/rate limiting in front of the API.
 - Redis-backed app rate limiting (`RATE_LIMIT_BACKEND=redis`).
 - Database and upload backups.
 - Release step: `alembic upgrade head`.
@@ -331,8 +333,8 @@ For production, run SigmaLite as separate frontend and backend services:
   chart, comment, share access, connect WebSocket, export CSV/XLSX/PDF.
 
 See [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) for migrations and
-troubleshooting, and [`docs/OPERATIONS.md`](docs/OPERATIONS.md) for production
-runbooks.
+troubleshooting, and [`docs/OPERATIONS.md`](docs/OPERATIONS.md) for
+self-hosted operations runbooks.
 
 ## Repository Layout
 
@@ -358,7 +360,7 @@ LICENSE                     MIT license
 | SigmaLite implements authenticated CSV upload, DB-backed row/cell storage, schema inference, paginated/sorted grid viewing, editable cell persistence, filtering, aggregate formulas, saved charts, comments, sharing, WebSocket activity, full export, migrations, CI, and E2E smoke coverage. | SigmaLite is not a full Excel-compatible formula engine. |
 | Dataset, sheet, chart, and comment routes are scoped to owners or explicit sheet collaborators. | SigmaLite is not a complete BI platform or warehouse-native semantic layer. |
 | Supported formulas include bounded aggregate formulas, whole-column references, same-column A1 ranges, direct cell refs, arithmetic, and `ROUND`. | SigmaLite does not implement CRDTs or operational transforms. |
-| Production config guards reject disabled auth, weak secrets, and wildcard CORS in production mode. | The current row/cell store is a public-beta storage strategy, not a warehouse-scale columnar engine. |
+| Public/self-hosted config guards reject disabled auth, weak secrets, and wildcard CORS in `selfhosted`, staging, and production modes. | The current row/cell store is a public-beta storage strategy, not a warehouse-scale columnar engine. |
 | CI exercises backend tests, frontend tests, migration smoke, production build, dependency audit, and Playwright E2E. | Local benchmark or smoke behavior should not be treated as a universal performance claim. |
 
 ## Known Limits
@@ -366,14 +368,14 @@ LICENSE                     MIT license
 - Collaboration uses optimistic version conflicts, not CRDTs or operational transforms.
 - Uploaded CSVs are retained as source artifacts; DB row/cell storage is authoritative after ingest.
 - Larger-dataset benchmark targets are documented, but not a universal performance claim.
-- Rate limiting uses Redis when configured and should still be paired with Cloudflare/API-domain controls.
+- Rate limiting uses Redis when configured and should still be paired with API-edge controls for internet-reachable instances.
 - API Shield schema validation should use the generated OpenAPI 3.0 artifact because FastAPI currently emits 3.1.
 
 ## Roadmap
 
 Next hardening:
 
-- Staging deployment verification behind the Cloudflare-proxied API domain.
+- Self-hosted deployment verification behind the chosen API edge, if any.
 - 100k/250k load-test runs and benchmark capture.
 - Cloudflare API Shield schema validation trial in log mode using the OpenAPI 3.0 export.
 - More frontend component coverage for the expanded sheet workspace.

@@ -25,7 +25,7 @@ services:
       - key: RATE_LIMIT_BACKEND
         value: redis
       - key: ENVIRONMENT
-        value: production
+        value: selfhosted
       - key: DEBUG
         value: false
       - key: DISABLE_AUTH

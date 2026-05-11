@@ -18,7 +18,7 @@ controls.
 | Charts | Beta | Bar/line/scatter/pie chart builder, saved charts, PNG export. Drag-and-drop builder is future work. |
 | Export | Beta | Full filtered/sorted CSV, XLSX, and PDF export with CSV formula-injection neutralization. |
 | Collaboration | Beta | WebSocket presence/cursor events with connection and fanout limits, persisted comments, role-based sharing, and optimistic cell conflict handling. |
-| Persistence | Public beta | Users, datasets, normalized row/cell tables, sheets, charts, comments, shares, audit events with Alembic migrations. SQLite local/test; Postgres production target. |
+| Persistence | Public beta | Users, datasets, normalized row/cell tables, sheets, charts, comments, shares, audit events with Alembic migrations. SQLite local/test; Postgres self-hosted/public target. |
 | Security hardening | Beta | Public-environment config guards, CORS allow-list, JWT auth, refresh rotation, one-time WebSocket tickets, route validation, Redis-backed sliding-window app limits, protected metrics/docs defaults, Cloudflare WAF runbook, Render Blueprint. |
 | QA | Beta | Backend tests including 10k-row smoke, deployed-API smoke utility, load-tool checks, OpenAPI 3.0 export checks, and deployment config checks; frontend unit tests, lint, production build, and Playwright product-loop smoke. |
 
@@ -50,5 +50,5 @@ controls.
 | --- | --- |
 | MVP demo | Cleared |
 | Internal beta | Ready after deployment env verification |
-| Public beta | Ready for Render Blueprint apply, staging verification behind Cloudflare, and benchmark capture |
-| Enterprise/production | Needs advanced governance, CRDT/OT-style collaboration, warehouse-scale storage strategy, and formal SLOs |
+| Public beta | Ready for self-hosted deployment verification, optional Render/Vercel examples, and benchmark capture |
+| Enterprise/SOC2 production | Out of scope; would need advanced governance, CRDT/OT-style collaboration, warehouse-scale storage strategy, and formal SLOs |
