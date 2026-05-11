@@ -71,12 +71,16 @@ export interface CellUpdateRequest {
   row_index: number;
   column: string;
   value: any;
+  expected_version?: number;
+  force?: boolean;
 }
 
 export interface CellUpdateResult {
   row_index: number;
   column: string;
   value: any;
+  formula?: string | null;
+  version?: number;
 }
 
 export interface FilterRequest {
@@ -92,10 +96,25 @@ export interface FilterQuery {
   page_size: number;
 }
 
+export interface SortRequest {
+  column: string;
+  direction: 'asc' | 'desc';
+}
+
+export interface DatasetQuery {
+  filters: FilterRequest[];
+  logic: 'and' | 'or';
+  sort?: SortRequest | null;
+  page: number;
+  page_size: number;
+}
+
 export interface AggregateRequest {
   column: string;
   operation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'median';
   group_by?: string[];
+  filters?: FilterRequest[];
+  logic?: 'and' | 'or';
 }
 
 export interface AggregateResult {
@@ -109,6 +128,7 @@ export interface Sheet {
   description?: string;
   dataset_id: number;
   owner_id: number;
+  access_role: 'owner' | 'editor' | 'viewer';
   config?: Record<string, any>;
   created_at: string;
   updated_at?: string;
@@ -139,6 +159,44 @@ export interface SheetComment {
   updated_at?: string;
 }
 
+export interface FormulaPreviewRequest {
+  row_index: number;
+  column: string;
+  value: string;
+}
+
+export interface FormulaPreviewResult {
+  valid: boolean;
+  value?: any;
+  formula?: string | null;
+  error?: string | null;
+}
+
+export interface SheetExportRequest {
+  format: 'csv' | 'xlsx' | 'pdf';
+  filters: FilterRequest[];
+  logic: 'and' | 'or';
+  sort?: SortRequest | null;
+  include_comments?: boolean;
+  include_charts?: boolean;
+}
+
+export interface SheetShare {
+  id: number;
+  sheet_id: number;
+  user_id: number;
+  username: string;
+  email?: string;
+  role: 'owner' | 'editor' | 'viewer';
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface SheetShareCreate {
+  username_or_email: string;
+  role: 'editor' | 'viewer';
+}
+
 export interface Chart {
   id: number;
   name: string;
@@ -157,6 +215,12 @@ export interface ChartConfig {
   values?: string;
   title?: string;
   colors?: string[];
+  query?: {
+    filters: FilterRequest[];
+    logic: 'and' | 'or';
+    sort?: SortRequest | null;
+    page_size: number;
+  };
   [key: string]: any;
 }
 
@@ -167,8 +231,22 @@ export interface ChartCreate {
   config: ChartConfig;
 }
 
+export interface WebSocketTicketResponse {
+  ticket: string;
+  expires_at: string;
+}
+
 export interface WebSocketMessage {
-  type: 'connected' | 'user_joined' | 'user_left' | 'cell_update' | 'cursor_move' | 'selection' | 'comment';
+  type:
+    | 'connected'
+    | 'user_joined'
+    | 'user_left'
+    | 'cell_update'
+    | 'cursor_move'
+    | 'selection'
+    | 'comment'
+    | 'error'
+    | 'access_revoked';
   user_id?: number;
   username?: string;
   active_users?: Array<{ user_id: number; username: string }>;

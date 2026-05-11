@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     
     # Project
     PROJECT_NAME: str = "SigmaLite"
-    VERSION: str = "1.0.0"
+    VERSION: str = "0.2.0-beta.1"
     API_V1_STR: str = "/api"
     
     # Database
@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
+    RATE_LIMIT_BACKEND: str = "auto"  # auto, redis, memory
     
     # JWT
     SECRET_KEY: str
@@ -26,18 +27,32 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     
     # CORS - can be comma-separated string or list
-    ALLOWED_ORIGINS: Union[List[str], str] = "http://localhost:5173,http://localhost:3000"
+    ALLOWED_ORIGINS: Union[List[str], str] = (
+        "http://localhost:5173,http://127.0.0.1:5173,"
+        "http://localhost:3000,http://127.0.0.1:3000"
+    )
     
     # File Upload
     MAX_UPLOAD_SIZE: int = 10485760  # 10MB
     UPLOAD_DIR: str = "./uploads"
     
     # Environment
-    ENVIRONMENT: str = "development"
-    DEBUG: bool = True
+    ENVIRONMENT: str
+    DEBUG: bool = False
+    ENABLE_OTEL: bool = False
+    EXPOSE_API_DOCS: bool = False
+    EXPOSE_PUBLIC_METRICS: bool = False
+    METRICS_TOKEN: str = ""
+    TRUST_PROXY_CLIENT_IP_HEADER: str = ""
     
     # Authentication
     DISABLE_AUTH: bool = False  # Set to True to disable authentication
+
+    # Public-beta safety caps
+    MAX_EXPORT_ROWS: int = 100000
+    MAX_FORMULA_LENGTH: int = 512
+    MAX_FORMULA_EVAL_ROWS: int = 100000
+    WS_TICKET_TTL_SECONDS: int = 60
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -48,12 +63,14 @@ class Settings(BaseSettings):
         if isinstance(self.ALLOWED_ORIGINS, str):
             self.ALLOWED_ORIGINS = [origin.strip() for origin in self.ALLOWED_ORIGINS.split(',')]
 
-        self._validate_production_settings()
+        self._validate_environment_settings()
 
-    def _validate_production_settings(self) -> None:
-        """Reject local/demo settings when the app is explicitly production."""
-        if self.ENVIRONMENT.lower() not in {"prod", "production"}:
-            return
+    def _validate_environment_settings(self) -> None:
+        """Reject unknown or unsafe settings before serving public traffic."""
+        environment = self.ENVIRONMENT.lower()
+        allowed_environments = {"development", "test", "testing", "staging", "production"}
+        if environment not in allowed_environments:
+            raise ValueError("ENVIRONMENT must be one of development, test, staging, production")
 
         unsafe_secret_values = {
             "change-me",
@@ -61,15 +78,30 @@ class Settings(BaseSettings):
             "secret",
             "dev-secret",
             "test-secret-key-not-for-production",
+            "your-secret-key-change-this-in-production",
+            "replace-with-a-long-random-secret",
         }
-        if self.SECRET_KEY.strip().lower() in unsafe_secret_values or len(self.SECRET_KEY) < 32:
-            raise ValueError("SECRET_KEY must be a strong production secret")
+        if self.is_public_environment():
+            if self.SECRET_KEY.strip().lower() in unsafe_secret_values or len(self.SECRET_KEY) < 32:
+                raise ValueError("SECRET_KEY must be a strong public-environment secret")
 
-        if self.DISABLE_AUTH:
-            raise ValueError("DISABLE_AUTH cannot be true in production")
+            if self.DISABLE_AUTH:
+                raise ValueError("DISABLE_AUTH cannot be true in public environments")
 
-        if "*" in self.ALLOWED_ORIGINS:
-            raise ValueError("Wildcard ALLOWED_ORIGINS is not allowed in production")
+            if "*" in self.ALLOWED_ORIGINS:
+                raise ValueError("Wildcard ALLOWED_ORIGINS is not allowed in public environments")
+
+            if self.RATE_LIMIT_BACKEND != "redis":
+                raise ValueError("RATE_LIMIT_BACKEND must be redis in public environments")
+
+    def is_public_environment(self) -> bool:
+        return self.ENVIRONMENT.lower() in {"production", "staging"}
+
+    def api_docs_enabled(self) -> bool:
+        return not self.is_public_environment() or self.EXPOSE_API_DOCS
+
+    def public_metrics_enabled(self) -> bool:
+        return not self.is_public_environment() or self.EXPOSE_PUBLIC_METRICS
 
 
 settings = Settings()

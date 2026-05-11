@@ -7,15 +7,22 @@ import type {
   User,
   Dataset,
   DatasetData,
+  DatasetQuery,
   FilterQuery,
   AggregateRequest,
   AggregateResult,
   CellUpdateRequest,
   CellUpdateResult,
   CommentCreate,
+  FormulaPreviewRequest,
+  FormulaPreviewResult,
   Sheet,
   SheetCreate,
   SheetComment,
+  SheetExportRequest,
+  SheetShare,
+  SheetShareCreate,
+  WebSocketTicketResponse,
   Chart,
   ChartCreate,
 } from '@/types';
@@ -49,23 +56,27 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
       originalRequest._retry = true;
 
       try {
         const refreshToken = localStorage.getItem('refresh_token');
-        if (refreshToken) {
-          const response = await axios.post(`${API_URL}/api/auth/refresh`, {
-            token: refreshToken,
-          });
-
-          const { access_token, refresh_token } = response.data;
-          localStorage.setItem('access_token', access_token);
-          localStorage.setItem('refresh_token', refresh_token);
-
-          originalRequest.headers.Authorization = `Bearer ${access_token}`;
-          return api(originalRequest);
+        if (!refreshToken) {
+          useAuthStore.getState().logout();
+          window.location.href = '/login';
+          return Promise.reject(error);
         }
+
+        const response = await axios.post(`${API_URL}/api/auth/refresh`, {
+          token: refreshToken,
+        });
+
+        const { access_token, refresh_token } = response.data;
+        localStorage.setItem('access_token', access_token);
+        localStorage.setItem('refresh_token', refresh_token);
+
+        originalRequest.headers.Authorization = `Bearer ${access_token}`;
+        return api(originalRequest);
       } catch (refreshError) {
         useAuthStore.getState().logout();
         window.location.href = '/login';
@@ -102,8 +113,24 @@ export const authAPI = {
     return response.data;
   },
 
-  logout: () => {
-    useAuthStore.getState().logout();
+  logout: async (): Promise<void> => {
+    const accessToken = localStorage.getItem('access_token');
+    const refreshToken = localStorage.getItem('refresh_token');
+    try {
+      if (accessToken) {
+        await axios.post(
+          `${API_URL}/api/auth/logout`,
+          { refresh_token: refreshToken },
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+          }
+        );
+      }
+    } finally {
+      useAuthStore.getState().logout();
+    }
   },
 };
 
@@ -139,6 +166,11 @@ export const datasetAPI = {
     const response = await api.get(`/api/datasets/${id}/data`, {
       params: { page, page_size: pageSize },
     });
+    return response.data;
+  },
+
+  query: async (id: number, query: DatasetQuery): Promise<DatasetData> => {
+    const response = await api.post(`/api/datasets/${id}/query`, query);
     return response.data;
   },
 
@@ -189,6 +221,23 @@ export const sheetAPI = {
     return response.data;
   },
 
+  getData: async (id: number, page = 1, pageSize = 100): Promise<DatasetData> => {
+    const response = await api.get(`/api/sheets/${id}/data`, {
+      params: { page, page_size: pageSize },
+    });
+    return response.data;
+  },
+
+  query: async (id: number, query: DatasetQuery): Promise<DatasetData> => {
+    const response = await api.post(`/api/sheets/${id}/query`, query);
+    return response.data;
+  },
+
+  aggregate: async (id: number, request: AggregateRequest): Promise<AggregateResult> => {
+    const response = await api.post(`/api/sheets/${id}/aggregate`, request);
+    return response.data;
+  },
+
   update: async (id: number, data: Partial<Sheet>): Promise<Sheet> => {
     const response = await api.put(`/api/sheets/${id}`, data);
     return response.data;
@@ -208,6 +257,51 @@ export const sheetAPI = {
     data: CommentCreate
   ): Promise<SheetComment> => {
     const response = await api.post(`/api/sheets/${id}/comments`, data);
+    return response.data;
+  },
+
+  updateCell: async (
+    id: number,
+    request: CellUpdateRequest
+  ): Promise<CellUpdateResult> => {
+    const response = await api.patch(`/api/sheets/${id}/cell`, request);
+    return response.data;
+  },
+
+  previewFormula: async (
+    id: number,
+    request: FormulaPreviewRequest
+  ): Promise<FormulaPreviewResult> => {
+    const response = await api.post(`/api/sheets/${id}/formula-preview`, request);
+    return response.data;
+  },
+
+  export: async (id: number, request: SheetExportRequest): Promise<Blob> => {
+    const response = await api.post(`/api/sheets/${id}/export`, request, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  listShares: async (id: number): Promise<SheetShare[]> => {
+    const response = await api.get(`/api/sheets/${id}/shares`);
+    return response.data;
+  },
+
+  createShare: async (
+    id: number,
+    data: SheetShareCreate
+  ): Promise<SheetShare> => {
+    const response = await api.post(`/api/sheets/${id}/shares`, data);
+    return response.data;
+  },
+
+  deleteShare: async (id: number, shareId: number): Promise<void> => {
+    await api.delete(`/api/sheets/${id}/shares/${shareId}`);
+  },
+
+  createWebSocketTicket: async (id: number): Promise<WebSocketTicketResponse> => {
+    const response = await api.post(`/api/sheets/${id}/ws-ticket`, {});
     return response.data;
   },
 };

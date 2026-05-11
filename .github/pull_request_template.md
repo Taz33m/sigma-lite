@@ -6,10 +6,12 @@ What changed and why?
 
 - [ ] Backend tests: `cd backend && uv run python -m pytest -q`
 - [ ] Migration smoke: fresh SQLite `alembic upgrade head`
+- [ ] Frontend lint: `cd frontend && npm run lint`
 - [ ] Frontend tests: `cd frontend && npm test -- --run`
 - [ ] Frontend build: `cd frontend && npm run build`
 - [ ] E2E: `cd frontend && npm run test:e2e -- --project=chromium`
-- [ ] Production audit gate: `cd frontend && npm audit --omit=dev --audit-level=high`
+- [ ] Backend dependency audit: `cd backend && uv run pip-audit -r requirements.txt`
+- [ ] Frontend production audit: `cd frontend && npm audit --omit=dev --audit-level=moderate`
 
 ## Screenshots
 

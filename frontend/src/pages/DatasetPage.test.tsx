@@ -13,4 +13,13 @@ describe('buildDatasetGridRows', () => {
       { id: 42, name: 'Bob', __row_id: 1 },
     ]);
   });
+
+  it('uses source row identity when the API provides it', () => {
+    const rows = buildDatasetGridRows([
+      { __source_index: 15, id: 42, name: 'Alice' },
+      { __source_index: 31, id: 42, name: 'Bob' },
+    ]);
+
+    expect(rows.map((row) => row.__row_id)).toEqual([15, 31]);
+  });
 });

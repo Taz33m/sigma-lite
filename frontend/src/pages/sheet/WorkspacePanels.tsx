@@ -12,6 +12,7 @@ import {
   type GridColDef,
   type GridPaginationModel,
   type GridRowModel,
+  type GridSortModel,
 } from '@mui/x-data-grid';
 import type { Dataset as DatasetRecord, Sheet } from '@/types';
 import type { DatasetGridRow } from '@/lib/datasetGrid';
@@ -24,8 +25,11 @@ export function SheetSummaryBar({
   rowCountLabel,
   onSave,
   onExport,
+  onExportXlsx,
+  onExportPdf,
   saving,
   canExport,
+  canEdit,
 }: {
   dataset?: DatasetRecord;
   sheet?: Sheet;
@@ -34,8 +38,11 @@ export function SheetSummaryBar({
   rowCountLabel: string;
   onSave: () => void;
   onExport: () => void;
+  onExportXlsx: () => void;
+  onExportPdf: () => void;
   saving: boolean;
   canExport: boolean;
+  canEdit: boolean;
 }) {
   return (
     <Paper
@@ -70,11 +77,29 @@ export function SheetSummaryBar({
         <Button
           variant="outlined"
           startIcon={<Save />}
-          disabled={!sheet || saving}
+          disabled={!sheet || saving || !canEdit}
           onClick={onSave}
           size="small"
         >
           {saving ? 'Saving...' : 'Save View'}
+        </Button>
+        <Button
+          variant="outlined"
+          startIcon={<FileDownload />}
+          disabled={!canExport}
+          onClick={onExportXlsx}
+          size="small"
+        >
+          XLSX
+        </Button>
+        <Button
+          variant="outlined"
+          startIcon={<FileDownload />}
+          disabled={!canExport}
+          onClick={onExportPdf}
+          size="small"
+        >
+          PDF
         </Button>
         <Button
           variant="outlined"
@@ -101,7 +126,9 @@ export function DataGridPanel({
   rowCount,
   loading,
   paginationModel,
+  sortModel,
   onPaginationModelChange,
+  onSortModelChange,
   processRowUpdate,
   onProcessRowUpdateError,
   onCellSelect,
@@ -111,7 +138,9 @@ export function DataGridPanel({
   rowCount: number;
   loading: boolean;
   paginationModel: GridPaginationModel;
+  sortModel: GridSortModel;
   onPaginationModelChange: (model: GridPaginationModel) => void;
+  onSortModelChange: (model: GridSortModel) => void;
   processRowUpdate: (
     newRow: GridRowModel<DatasetGridRow>,
     oldRow: GridRowModel<DatasetGridRow>
@@ -136,10 +165,13 @@ export function DataGridPanel({
         columns={columns}
         getRowId={(row) => row.__row_id}
         paginationMode="server"
+        sortingMode="server"
         rowCount={rowCount}
         loading={loading}
         paginationModel={paginationModel}
+        sortModel={sortModel}
         onPaginationModelChange={onPaginationModelChange}
+        onSortModelChange={onSortModelChange}
         pageSizeOptions={[10, 25, 50, 100]}
         processRowUpdate={processRowUpdate}
         onProcessRowUpdateError={onProcessRowUpdateError}

@@ -1,4 +1,5 @@
 import { type MutableRefObject, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Button, Box, Stack, Typography } from '@mui/material';
 import { FileDownload } from '@mui/icons-material';
 import {
@@ -15,6 +16,7 @@ import {
 import type { ChartData } from 'chart.js';
 import { Bar, Line, Pie, Scatter } from 'react-chartjs-2';
 import type { Chart as SavedChart } from '@/types';
+import { sheetAPI } from '@/lib/api';
 
 ChartJS.register(
   ArcElement,
@@ -125,12 +127,32 @@ export function ChartPreview({
 
 export function SavedChartCard({
   chart,
-  rows,
+  fallbackRows,
 }: {
   chart: SavedChart;
-  rows: Record<string, unknown>[];
+  fallbackRows: Record<string, unknown>[];
 }) {
   const chartRef = useRef<ChartJS | null>(null);
+  const queryScope = chart.config.query || {
+    filters: [],
+    logic: 'and' as const,
+    sort: null,
+    page_size: 1000,
+  };
+  const { data: chartData, isLoading } = useQuery({
+    queryKey: ['chart-data', chart.id, queryScope],
+    queryFn: () =>
+      sheetAPI.query(chart.sheet_id, {
+        filters: queryScope.filters || [],
+        logic: queryScope.logic || 'and',
+        sort: queryScope.sort || null,
+        page: 1,
+        page_size: queryScope.page_size || 1000,
+      }),
+    enabled: chart.id > 0,
+  });
+  const rows = chartData?.data || fallbackRows;
+  const truncated = Boolean(chartData && chartData.total_rows > rows.length);
 
   const downloadPng = () => {
     const imageUrl = chartRef.current?.toBase64Image();
@@ -162,8 +184,19 @@ export function SavedChartCard({
         </Button>
       </Stack>
       <Box sx={{ height: 240 }}>
-        <ChartPreview chart={chart} rows={rows} chartRef={chartRef} />
+        {isLoading ? (
+          <Typography variant="body2" color="text.secondary">
+            Loading chart data...
+          </Typography>
+        ) : (
+          <ChartPreview chart={chart} rows={rows} chartRef={chartRef} />
+        )}
       </Box>
+      {truncated && (
+        <Typography variant="caption" color="text.secondary">
+          Showing first {rows.length.toLocaleString()} rows
+        </Typography>
+      )}
     </Box>
   );
 }

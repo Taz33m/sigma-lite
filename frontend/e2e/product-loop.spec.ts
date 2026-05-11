@@ -4,11 +4,12 @@ test('core product loop: auth, upload, sheet, edit, filter, chart, comment, expo
   page,
   request,
 }) => {
+  const apiUrl = `http://127.0.0.1:${process.env.E2E_BACKEND_PORT ?? '8001'}`;
   const suffix = Date.now();
   const username = `e2e_${suffix}`;
   const password = 'e2epass123';
 
-  const register = await request.post('http://127.0.0.1:8001/api/auth/register', {
+  const register = await request.post(`${apiUrl}/api/auth/register`, {
     data: {
       email: `${username}@example.com`,
       username,
@@ -18,12 +19,12 @@ test('core product loop: auth, upload, sheet, edit, filter, chart, comment, expo
   });
   expect(register.ok()).toBeTruthy();
 
-  const login = await request.post('http://127.0.0.1:8001/api/auth/login', {
+  const login = await request.post(`${apiUrl}/api/auth/login`, {
     form: { username, password },
   });
   expect(login.ok()).toBeTruthy();
   const tokens = await login.json();
-  const me = await request.get('http://127.0.0.1:8001/api/auth/me', {
+  const me = await request.get(`${apiUrl}/api/auth/me`, {
     headers: { Authorization: `Bearer ${tokens.access_token}` },
   });
   const user = await me.json();
@@ -50,7 +51,7 @@ test('core product loop: auth, upload, sheet, edit, filter, chart, comment, expo
   await page.goto('/');
 
   await expect(page.getByRole('heading', { name: /my datasets/i })).toBeVisible();
-  const upload = await request.post('http://127.0.0.1:8001/api/datasets', {
+  const upload = await request.post(`${apiUrl}/api/datasets`, {
     headers: { Authorization: `Bearer ${tokens.access_token}` },
     multipart: {
       name: 'E2E People',
@@ -73,8 +74,8 @@ test('core product loop: auth, upload, sheet, edit, filter, chart, comment, expo
   await expect(page.getByText('Alice')).toBeVisible();
   await expect(page.getByText('Saved sheet')).toBeVisible();
 
-  const ageCell = page.getByRole('cell', { name: '25' }).first();
-  await ageCell.dblclick();
+  const cityCell = page.getByRole('cell', { name: 'LA' }).first();
+  await cityCell.dblclick();
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
   await page.keyboard.type('=SUM(B1:B3)');
   await page.keyboard.press('Enter');
@@ -98,7 +99,7 @@ test('core product loop: auth, upload, sheet, edit, filter, chart, comment, expo
   await page.getByRole('option', { name: 'city' }).click();
   await page.getByLabel('Operator').click();
   await page.getByRole('option', { name: 'eq' }).click();
-  await page.getByLabel('Value').fill('LA');
+  await page.getByLabel('Value').fill('95');
   await page.getByRole('button', { name: /^add$/i }).click();
   await expect(page.getByText(/1 active filter/i)).toBeVisible();
 
@@ -106,7 +107,7 @@ test('core product loop: auth, upload, sheet, edit, filter, chart, comment, expo
   await page.getByLabel('Column').click();
   await page.getByRole('option', { name: 'age' }).click();
   await page.getByRole('button', { name: /^run$/i }).click();
-  await expect(page.getByText('95')).toBeVisible();
+  await expect(page.getByRole('heading', { name: '25' })).toBeVisible();
 
   await page.getByRole('tab', { name: 'Charts' }).click();
   await page.getByRole('textbox', { name: 'Name' }).fill('Age by city');
@@ -118,7 +119,7 @@ test('core product loop: auth, upload, sheet, edit, filter, chart, comment, expo
   await expect(page.getByText('Chart saved')).toBeVisible();
   await expect(page.getByText('Age by city')).toBeVisible();
 
-  await page.getByRole('cell', { name: 'LA' }).first().click();
+  await page.getByRole('cell', { name: '95' }).first().click();
   await page.getByRole('tab', { name: 'Comments' }).click();
   await page.getByLabel('Comment').fill('Check this filtered cell');
   await page.getByRole('button', { name: /^send$/i }).click();
@@ -127,7 +128,7 @@ test('core product loop: auth, upload, sheet, edit, filter, chart, comment, expo
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: /export csv/i }).click();
   const file = await download;
-  expect(file.suggestedFilename()).toContain('current-page.csv');
+  expect(file.suggestedFilename()).toContain('export.csv');
 
   await page.reload();
   await page.getByRole('tab', { name: 'Comments' }).click();

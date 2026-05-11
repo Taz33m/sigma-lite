@@ -44,20 +44,6 @@ class DatasetData(BaseModel):
     total_pages: int
 
 
-class CellUpdateRequest(BaseModel):
-    """Schema for updating one dataset cell."""
-    row_index: int = Field(..., ge=0)
-    column: str
-    value: Any
-
-
-class CellUpdateResult(BaseModel):
-    """Schema for a cell update result."""
-    row_index: int
-    column: str
-    value: Any
-
-
 class FilterRequest(BaseModel):
     """Schema for filter request."""
     column: str
@@ -73,7 +59,40 @@ class FilterRequest(BaseModel):
         "endswith",
     ]
     value: Any
-    
+
+
+class SortRequest(BaseModel):
+    """Schema for one server-side sort."""
+    column: str
+    direction: Literal["asc", "desc"] = "asc"
+
+
+class DatasetQuery(BaseModel):
+    """Schema for DB-backed dataset querying."""
+    filters: List[FilterRequest] = Field(default_factory=list)
+    logic: Literal["and", "or"] = "and"
+    sort: Optional[SortRequest] = None
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=100, ge=1, le=1000)
+
+
+class CellUpdateRequest(BaseModel):
+    """Schema for updating one dataset cell."""
+    row_index: int = Field(..., ge=0)
+    column: str
+    value: Any
+    expected_version: Optional[int] = Field(None, ge=0)
+    force: bool = False
+
+
+class CellUpdateResult(BaseModel):
+    """Schema for a cell update result."""
+    row_index: int
+    column: str
+    value: Any
+    formula: Optional[str] = None
+    version: Optional[int] = None
+
 
 class FilterQuery(BaseModel):
     """Schema for multiple filters."""
@@ -88,6 +107,8 @@ class AggregateRequest(BaseModel):
     column: str
     operation: str  # sum, avg, min, max, count, median
     group_by: Optional[List[str]] = None
+    filters: List[FilterRequest] = Field(default_factory=list)
+    logic: Literal["and", "or"] = "and"
 
 
 class AggregateResult(BaseModel):
@@ -122,6 +143,7 @@ class Sheet(SheetBase):
 
     id: int
     owner_id: int
+    access_role: Literal["owner", "editor", "viewer"] = "owner"
     config: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
@@ -178,3 +200,69 @@ class Chart(ChartBase):
     config: Dict[str, Any]
     created_at: datetime
     updated_at: Optional[datetime] = None
+
+
+class FormulaPreviewRequest(BaseModel):
+    """Schema for formula validation/evaluation without persistence."""
+    row_index: int = Field(..., ge=0)
+    column: str
+    value: str
+
+
+class FormulaPreviewResult(BaseModel):
+    """Formula preview result."""
+    valid: bool
+    value: Any = None
+    formula: Optional[str] = None
+    error: Optional[str] = None
+
+
+class SheetExportRequest(BaseModel):
+    """Full sheet export request."""
+    format: Literal["csv", "xlsx", "pdf"] = "csv"
+    filters: List[FilterRequest] = Field(default_factory=list)
+    logic: Literal["and", "or"] = "and"
+    sort: Optional[SortRequest] = None
+    include_comments: bool = True
+    include_charts: bool = True
+
+
+class SheetShareCreate(BaseModel):
+    """Grant sheet access to an existing user."""
+    username_or_email: str = Field(..., min_length=1)
+    role: Literal["editor", "viewer"]
+
+
+class SheetShare(BaseModel):
+    """Public sheet share schema."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    sheet_id: int
+    user_id: int
+    username: str
+    email: str
+    role: Literal["owner", "editor", "viewer"]
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+
+class WebSocketTicketResponse(BaseModel):
+    """One-time WebSocket collaboration ticket."""
+    ticket: str
+    expires_at: datetime
+
+
+class AuditEvent(BaseModel):
+    """Public audit event schema."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    actor_id: Optional[int] = None
+    action: str
+    entity_type: str
+    entity_id: Optional[int] = None
+    metadata: Optional[Dict[str, Any]] = None
+    ip_address: Optional[str] = None
+    request_id: Optional[str] = None
+    created_at: datetime

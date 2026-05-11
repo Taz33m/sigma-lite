@@ -26,13 +26,34 @@ from app.core.database import Base, get_db
 from app.core.rate_limit import rate_limiter
 
 
+def _use_configured_database_url() -> bool:
+    return settings.DATABASE_URL.startswith(("postgresql://", "postgresql+"))
+
+
+def _reset_redis_rate_limits() -> None:
+    if settings.ENVIRONMENT.lower() not in {"test", "testing"}:
+        return
+    if settings.RATE_LIMIT_BACKEND != "redis":
+        return
+
+    import redis
+
+    client = redis.Redis.from_url(settings.REDIS_URL, decode_responses=True)
+    keys = list(client.scan_iter("sigmalite:rate:*"))
+    if keys:
+        client.delete(*keys)
+
+
 @pytest.fixture(scope="session")
 def engine():
-    eng = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
+    if _use_configured_database_url():
+        eng = create_engine(settings.DATABASE_URL, pool_pre_ping=True)
+    else:
+        eng = create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
     yield eng
     eng.dispose()
 
@@ -53,6 +74,7 @@ def db_session(engine):
 def client(db_session, tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "UPLOAD_DIR", str(tmp_path))
     rate_limiter.reset()
+    _reset_redis_rate_limits()
 
     def override_get_db():
         try:

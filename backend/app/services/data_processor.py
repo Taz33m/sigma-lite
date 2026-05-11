@@ -3,7 +3,12 @@ import numpy as np
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 import json
+import ast
+import math
+import operator
 import re
+
+from app.core.config import settings
 
 
 class DataProcessor:
@@ -75,46 +80,184 @@ class DataProcessor:
         }
 
     @staticmethod
-    def evaluate_formula(df: pd.DataFrame, formula: str) -> Any:
+    def evaluate_formula(
+        df: pd.DataFrame,
+        formula: str,
+        target_row_index: Optional[int] = None,
+        target_column: Optional[str] = None,
+    ) -> Any:
         """Evaluate a small set of spreadsheet-like aggregate formulas."""
         expression = formula.strip()
         if not expression.startswith("="):
             return formula
+        if len(expression) > settings.MAX_FORMULA_LENGTH:
+            raise ValueError("Formula exceeds maximum length")
+        if len(df) > settings.MAX_FORMULA_EVAL_ROWS:
+            raise ValueError("Formula evaluation exceeds maximum row count")
 
         expression = expression[1:].strip()
-        if "(" not in expression or not expression.endswith(")"):
+        if not expression:
             raise ValueError("Unsupported formula")
 
-        operation, reference = expression[:-1].split("(", 1)
-        operation = operation.strip().lower()
-        reference = reference.strip()
+        expression = DataProcessor._replace_aggregate_calls(
+            df,
+            expression,
+            target_row_index=target_row_index,
+            target_column=target_column,
+        )
+        expression = DataProcessor._replace_cell_references(
+            df,
+            expression,
+            target_row_index=target_row_index,
+            target_column=target_column,
+        )
 
-        series = DataProcessor._formula_series(df, reference)
-        numeric_series = pd.to_numeric(series, errors="coerce")
-
-        if operation == "sum":
-            return float(numeric_series.sum())
-        if operation in {"avg", "average"}:
-            return float(numeric_series.mean())
-        if operation == "min":
-            return float(numeric_series.min())
-        if operation == "max":
-            return float(numeric_series.max())
-        if operation == "count":
-            return int(series.count())
-        if operation == "median":
-            return float(numeric_series.median())
-
-        raise ValueError(f"Unknown formula: {operation}")
+        return DataProcessor._safe_arithmetic_eval(expression)
 
     @staticmethod
-    def _formula_series(df: pd.DataFrame, reference: str) -> pd.Series:
+    def _replace_aggregate_calls(
+        df: pd.DataFrame,
+        expression: str,
+        target_row_index: Optional[int] = None,
+        target_column: Optional[str] = None,
+    ) -> str:
+        pattern = re.compile(
+            r"\b(SUM|AVG|AVERAGE|MIN|MAX|COUNT|MEDIAN)\s*\(([^()]*)\)",
+            flags=re.IGNORECASE,
+        )
+
+        def replace(match: re.Match) -> str:
+            operation = match.group(1).lower()
+            reference = match.group(2).strip()
+            series = DataProcessor._formula_series(
+                df,
+                reference,
+                target_row_index=target_row_index,
+                target_column=target_column,
+            )
+            numeric_series = pd.to_numeric(series, errors="coerce")
+
+            if operation == "sum":
+                value = numeric_series.sum()
+            elif operation in {"avg", "average"}:
+                value = numeric_series.mean()
+            elif operation == "min":
+                value = numeric_series.min()
+            elif operation == "max":
+                value = numeric_series.max()
+            elif operation == "count":
+                value = series.count()
+            elif operation == "median":
+                value = numeric_series.median()
+            else:
+                raise ValueError(f"Unknown formula: {operation}")
+
+            if pd.isna(value):
+                return "0"
+            return repr(float(value) if operation != "count" else int(value))
+
+        previous = None
+        current = expression
+        while previous != current:
+            previous = current
+            current = pattern.sub(replace, current)
+        return current
+
+    @staticmethod
+    def _replace_cell_references(
+        df: pd.DataFrame,
+        expression: str,
+        target_row_index: Optional[int] = None,
+        target_column: Optional[str] = None,
+    ) -> str:
+        whole_column_or_range = re.compile(
+            r"([A-Za-z]+):\1|([A-Za-z]+)\d+:([A-Za-z]+)\d+"
+        )
+        if whole_column_or_range.search(expression):
+            raise ValueError("Ranges must be used inside aggregate functions")
+
+        def replace(match: re.Match) -> str:
+            letters, row_number = match.groups()
+            column = DataProcessor._column_from_letters(df, letters)
+            row_index = int(row_number) - 1
+            if row_index < 0 or row_index >= len(df):
+                raise ValueError("Formula cell reference is outside dataset")
+            if target_row_index == row_index and target_column == column:
+                raise ValueError("Formula cannot reference its own cell")
+
+            value = df.iloc[row_index][column]
+            numeric_value = pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0]
+            if pd.isna(numeric_value):
+                return "0"
+            return repr(float(numeric_value))
+
+        return re.sub(r"\b([A-Za-z]+)(\d+)\b", replace, expression)
+
+    @staticmethod
+    def _safe_arithmetic_eval(expression: str) -> Any:
+        allowed_binops = {
+            ast.Add: operator.add,
+            ast.Sub: operator.sub,
+            ast.Mult: operator.mul,
+            ast.Div: operator.truediv,
+            ast.Mod: operator.mod,
+        }
+        allowed_unary = {ast.UAdd: operator.pos, ast.USub: operator.neg}
+
+        def checked_number(value: float) -> float:
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ValueError("Unsupported formula")
+            if not math.isfinite(float(value)) or abs(float(value)) > 1_000_000_000_000:
+                raise ValueError("Formula result is outside supported numeric range")
+            return value
+
+        def evaluate(node: ast.AST) -> float:
+            if isinstance(node, ast.Expression):
+                return evaluate(node.body)
+            if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+                return checked_number(node.value)
+            if isinstance(node, ast.BinOp) and type(node.op) in allowed_binops:
+                return checked_number(allowed_binops[type(node.op)](evaluate(node.left), evaluate(node.right)))
+            if isinstance(node, ast.UnaryOp) and type(node.op) in allowed_unary:
+                return checked_number(allowed_unary[type(node.op)](evaluate(node.operand)))
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                function = node.func.id.lower()
+                if function == "round":
+                    args = [evaluate(arg) for arg in node.args]
+                    if len(args) not in {1, 2}:
+                        raise ValueError("ROUND expects one or two arguments")
+                    return checked_number(round(args[0], int(args[1]) if len(args) == 2 else 0))
+            raise ValueError("Unsupported formula")
+
+        try:
+            tree = ast.parse(expression, mode="eval")
+            if sum(1 for _ in ast.walk(tree)) > 64:
+                raise ValueError("Formula is too complex")
+            result = evaluate(tree)
+        except ZeroDivisionError as exc:
+            raise ValueError("Formula division by zero") from exc
+        except SyntaxError as exc:
+            raise ValueError("Unsupported formula") from exc
+
+        if isinstance(result, float) and result.is_integer():
+            return int(result)
+        return result
+
+    @staticmethod
+    def _formula_series(
+        df: pd.DataFrame,
+        reference: str,
+        target_row_index: Optional[int] = None,
+        target_column: Optional[str] = None,
+    ) -> pd.Series:
         """Resolve a formula reference to a Series.
 
         Supports existing column names, whole-column references such as B:B,
         and one-based A1 ranges such as A1:A5.
         """
         if reference in df.columns:
+            if target_column == reference:
+                raise ValueError("Formula cannot reference its own cell")
             return df[reference]
 
         whole_column_match = re.fullmatch(
@@ -123,6 +266,8 @@ class DataProcessor:
         )
         if whole_column_match:
             column = DataProcessor._column_from_letters(df, whole_column_match.group(1))
+            if target_column == column:
+                raise ValueError("Formula cannot reference its own cell")
             return df[column]
 
         range_match = re.fullmatch(
@@ -143,6 +288,12 @@ class DataProcessor:
                 raise ValueError("Invalid formula row range")
             if start_index >= len(df):
                 raise ValueError("Formula row range starts outside dataset")
+            if (
+                target_column == column
+                and target_row_index is not None
+                and start_index <= target_row_index <= end_index
+            ):
+                raise ValueError("Formula cannot reference its own cell")
 
             return df[column].iloc[start_index : min(end_index + 1, len(df))]
 
@@ -178,7 +329,12 @@ class DataProcessor:
             raise ValueError(f"Column '{column}' not found")
 
         stored_value = (
-            DataProcessor.evaluate_formula(df, value)
+            DataProcessor.evaluate_formula(
+                df,
+                value,
+                target_row_index=row_index,
+                target_column=column,
+            )
             if isinstance(value, str) and value.strip().startswith("=")
             else value
         )
@@ -230,7 +386,7 @@ class DataProcessor:
                     df[column], value, column
                 )
             elif operator == "contains":
-                mask = df[column].astype(str).str.contains(str(value), case=False, na=False)
+                mask = df[column].astype(str).str.contains(str(value), case=False, na=False, regex=False)
             elif operator == "startswith":
                 mask = df[column].astype(str).str.startswith(str(value), na=False)
             elif operator == "endswith":

@@ -20,6 +20,7 @@ import {
   Box,
   CircularProgress,
   Chip,
+  Alert,
 } from '@mui/material';
 import {
   CloudUpload,
@@ -43,7 +44,7 @@ export default function DashboardPage() {
     file: null as File | null,
   });
 
-  const { data: datasets, isLoading } = useQuery({
+  const { data: datasets, isLoading, isError } = useQuery({
     queryKey: ['datasets'],
     queryFn: datasetAPI.list,
   });
@@ -68,10 +69,13 @@ export default function DashboardPage() {
       toast.success('Dataset deleted');
       queryClient.invalidateQueries({ queryKey: ['datasets'] });
     },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.detail || 'Could not delete dataset');
+    },
   });
 
-  const handleLogout = () => {
-    authAPI.logout();
+  const handleLogout = async () => {
+    await authAPI.logout().catch(() => undefined);
     logout();
     navigate('/login');
   };
@@ -174,6 +178,10 @@ export default function DashboardPage() {
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
             <CircularProgress />
           </Box>
+        ) : isError ? (
+          <Alert severity="error">
+            Unable to load datasets. Please refresh or sign in again.
+          </Alert>
         ) : datasets && datasets.length > 0 ? (
           <Grid container spacing={3}>
             {datasets.map((dataset) => (
@@ -211,9 +219,14 @@ export default function DashboardPage() {
                       size="small"
                       color="error"
                       startIcon={<Delete />}
-                      onClick={() => deleteMutation.mutate(dataset.id)}
+                      disabled={deleteMutation.isPending}
+                      onClick={() => {
+                        if (window.confirm(`Delete "${dataset.name}"? This cannot be undone.`)) {
+                          deleteMutation.mutate(dataset.id);
+                        }
+                      }}
                     >
-                      Delete
+                      {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
                     </Button>
                   </CardActions>
                 </Card>

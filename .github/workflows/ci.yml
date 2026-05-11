@@ -27,9 +27,11 @@ jobs:
       - name: Install backend dependencies
         run: |
           uv venv
-          uv pip install -r requirements.txt
+          uv pip install -r requirements.txt -r requirements-dev.txt
       - name: Run backend tests
         run: uv run python -m pytest -q
+      - name: Audit backend production dependencies
+        run: uv run pip-audit -r requirements.txt
       - name: Run fresh migration smoke
         run: |
           rm -f migration_smoke.db
@@ -50,6 +52,13 @@ jobs:
               "sheets",
               "charts",
               "comments",
+              "dataset_columns",
+              "dataset_rows",
+              "dataset_cells",
+              "sheet_shares",
+              "audit_events",
+              "refresh_tokens",
+              "websocket_tickets",
               "alembic_version",
           }
           missing = expected - tables
@@ -57,6 +66,68 @@ jobs:
               raise SystemExit(f"Missing tables: {sorted(missing)}")
           print(sorted(tables))
           PY
+
+  backend-postgres-redis:
+    name: Backend Postgres and Redis integration
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: sigmalite_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d sigmalite_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/sigmalite_test
+      SECRET_KEY: ci-secret-key-with-enough-entropy-for-tests
+      ENVIRONMENT: test
+      DISABLE_AUTH: "False"
+      REDIS_URL: redis://localhost:6379/0
+      RATE_LIMIT_BACKEND: redis
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install backend dependencies
+        run: |
+          uv venv
+          uv pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run Postgres migrations
+        run: uv run alembic upgrade head
+      - name: Run focused integration subset
+        run: >
+          uv run python -m pytest -q
+          tests/test_auth.py::test_refresh_token_rotation_blocks_reuse_and_revokes_family
+          tests/test_auth.py::test_logout_revokes_refresh_token
+          tests/test_datasets.py::test_query_dataset_sorts_server_side
+          tests/test_datasets.py::test_filter_dataset_coerces_numeric_comparison_value
+          tests/test_datasets.py::test_aggregate_dataset
+          tests/test_sheets.py::test_sheet_scoped_data_query_and_aggregate_for_shared_viewer
+          tests/test_sheets.py::test_deleted_share_revokes_rest_export_and_websocket_ticket_access
+          tests/test_sheets.py::test_sheet_exports_full_dataset_formats
+          tests/test_websocket.py::test_websocket_connects_and_sends_initial_state
+          tests/test_config_hardening.py::test_upload_rate_limiter_checks_user_and_ip_buckets
 
   frontend:
     name: Frontend tests and build
@@ -73,12 +144,14 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install frontend dependencies
         run: npm ci
+      - name: Run frontend lint
+        run: npm run lint
       - name: Run frontend unit tests
         run: npm test -- --run
       - name: Build frontend
         run: npm run build
       - name: Audit production dependencies
-        run: npm audit --omit=dev --audit-level=high
+        run: npm audit --omit=dev --audit-level=moderate
 
   e2e:
     name: Playwright product loop

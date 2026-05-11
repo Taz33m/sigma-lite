@@ -10,11 +10,11 @@ see the top-level [`README.md`](../README.md).
 
 | Tool      | Version | Notes                                                 |
 | --------- | ------- | ----------------------------------------------------- |
-| Node.js   | 18+     | For the Vite/React frontend                           |
+| Node.js   | 22 recommended | Matches CI for the Vite/React frontend          |
 | Python    | 3.11+   | For the FastAPI backend                               |
 | SQLite    | bundled | Default local DB — no install required                |
 | PostgreSQL | 14+    | Optional; recommended for production                  |
-| Redis     | any     | Optional; used for caching when `REDIS_URL` is wired in |
+| Redis     | any     | Optional locally; required for staging/production rate limits |
 
 ### Backend
 
@@ -41,10 +41,9 @@ cp .env.example .env
 npm run dev                          # http://localhost:5173
 ```
 
-Vite proxies `/api` and `/ws` to the backend at `localhost:8000`, so no CORS
-config changes are needed for the default local ports. If you set
-`VITE_API_URL` to a different origin, add that exact origin to
-`ALLOWED_ORIGINS`.
+The default backend CORS settings allow both `localhost:5173` and
+`127.0.0.1:5173`. If you run Vite on a different host or port, add that exact
+frontend origin to `ALLOWED_ORIGINS`.
 
 ## Switching to PostgreSQL
 
@@ -102,6 +101,7 @@ creation.
 
 ```bash
 cd frontend
+npm run lint           # eslint
 npm test                # vitest in watch mode
 npx vitest run          # one-shot
 npm run test:coverage   # coverage report
@@ -116,11 +116,13 @@ isolated SQLite DB and its own Vite frontend on `127.0.0.1:5174`.
 
 ```bash
 cd backend
-DATABASE_URL=sqlite:///./migration_smoke.db SECRET_KEY=local-migration-secret alembic upgrade head
+DATABASE_URL=sqlite:///./migration_smoke.db ENVIRONMENT=development SECRET_KEY=local-migration-secret alembic upgrade head
 ```
 
-Expected tables after a fresh upgrade: `users`, `datasets`, `sheets`,
-`charts`, `comments`, and `alembic_version`.
+Expected tables after a fresh upgrade: `users`, `datasets`, `dataset_columns`,
+`dataset_rows`, `dataset_cells`, `sheets`, `charts`, `comments`,
+`sheet_shares`, `audit_events`, `refresh_tokens`, `websocket_tickets`, and
+`alembic_version`.
 
 ## Production deployment
 
@@ -132,11 +134,14 @@ Expected tables after a fresh upgrade: `users`, `datasets`, `sheets`,
    - `DATABASE_URL` — production Postgres URL
    - `SECRET_KEY` — long random string, at least 32 characters
    - `ALLOWED_ORIGINS` — comma-separated list of frontend origins
-   - `DISABLE_AUTH=False` (or omit; the default is `False`)
+   - `ENVIRONMENT=production` or `ENVIRONMENT=staging`
+   - `DISABLE_AUTH=False`
+   - `RATE_LIMIT_BACKEND=redis`
+   - `REDIS_URL` — managed Redis URL
 4. Run `alembic upgrade head` as a release task on each deploy.
 
-Production mode rejects weak/default `SECRET_KEY`, wildcard CORS, and
-`DISABLE_AUTH=True`.
+Staging/production mode rejects weak/default `SECRET_KEY`, wildcard CORS,
+`DISABLE_AUTH=True`, and non-Redis rate limiting.
 
 ### Frontend (Vercel or similar)
 
@@ -187,13 +192,15 @@ cosmetic warning changes.
 ## Deployment smoke checklist
 
 - `alembic upgrade head` succeeds against the production database.
-- `/health` returns healthy.
+- `/health/ready` returns ready.
 - Register/login/refresh works with production `SECRET_KEY`.
 - Upload a CSV and open the dataset page.
 - Create a sheet, edit a cell, apply a filter, run an aggregation, save a chart.
 - Add a comment and reload to confirm persistence.
-- Confirm `/ws/collaborate/{sheet_id}` connects from the deployed frontend.
-- Export CSV and verify formula-like values are neutralized.
+- Confirm `/api/sheets/{sheet_id}/ws-ticket` returns a ticket and
+  `/ws/collaborate/{sheet_id}?ticket=...` connects from the deployed frontend.
+- Share sheet access with an editor/viewer account.
+- Export CSV/XLSX/PDF and verify formula-like CSV values are neutralized.
 
 ## Tooling tips
 

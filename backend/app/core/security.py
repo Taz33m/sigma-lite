@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import hashlib
 from typing import Optional, Union
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -31,10 +32,14 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return encoded_jwt
 
 
-def create_refresh_token(data: dict) -> str:
+def create_refresh_token(data: dict, jti: str | None = None, family_id: str | None = None) -> str:
     """Create a JWT refresh token."""
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    if jti is not None:
+        to_encode["jti"] = jti
+    if family_id is not None:
+        to_encode["family_id"] = family_id
     to_encode.update({"exp": expire, "type": "refresh"})
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
@@ -47,3 +52,8 @@ def decode_token(token: str) -> Optional[dict]:
         return payload
     except JWTError:
         return None
+
+
+def hash_token(token: str) -> str:
+    """Hash a bearer-style token before storing it."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()

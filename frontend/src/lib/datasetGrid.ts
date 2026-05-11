@@ -3,12 +3,17 @@ import type { GridColDef } from '@mui/x-data-grid';
 export type DatasetGridRow = Record<string, unknown> & {
   __row_id: number;
   __source_index?: number;
+  __cell_versions?: Record<string, number>;
+  __cell_formulas?: Record<string, string>;
 };
 
 export function buildDatasetGridRows(
   data: Record<string, unknown>[] = []
 ): DatasetGridRow[] {
-  return data.map((row, index) => ({ ...row, __row_id: index }));
+  return data.map((row, index) => ({
+    ...row,
+    __row_id: Number(row.__source_index ?? index),
+  }));
 }
 
 export function buildDatasetGridColumns(

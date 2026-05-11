@@ -37,6 +37,7 @@ import {
   type GridColDef,
   type GridRowModel,
   type GridPaginationModel,
+  type GridSortModel,
 } from '@mui/x-data-grid';
 import { chartAPI, datasetAPI, sheetAPI } from '@/lib/api';
 import {
@@ -44,10 +45,11 @@ import {
   buildDatasetGridRows,
   type DatasetGridRow,
 } from '@/lib/datasetGrid';
-import { downloadCsv } from '@/lib/exportCsv';
 import { ChartPreview, SavedChartCard } from '@/pages/sheet/ChartPreview';
 import { DataGridPanel, SheetSummaryBar } from '@/pages/sheet/WorkspacePanels';
+import { formatCommittedCellUpdateToast } from '@/pages/sheet/realtime';
 import { useSheetSocket } from '@/pages/sheet/useSheetSocket';
+import { useAuthStore } from '@/store/authStore';
 import type {
   CollaborationComment,
   SelectedCell,
@@ -59,6 +61,7 @@ import type {
   Chart as SavedChart,
   ChartCreate,
   FilterRequest,
+  SheetShare,
 } from '@/types';
 
 const filterOperators: FilterRequest['operator'][] = [
@@ -83,17 +86,27 @@ const aggregateOperations: AggregateRequest['operation'][] = [
 ];
 
 const chartTypes: ChartCreate['chart_type'][] = ['bar', 'line', 'scatter', 'pie'];
-type InspectorTab = 'filters' | 'summary' | 'fields' | 'comments' | 'charts';
+type InspectorTab = 'filters' | 'summary' | 'fields' | 'comments' | 'charts' | 'access';
+
+type CellConflict = {
+  rowIndex: number;
+  column: string;
+  currentValue: unknown;
+  currentVersion: number;
+  attemptedValue: unknown;
+};
 
 export default function SheetPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const sheetId = Number(id);
+  const currentUser = useAuthStore((state) => state.user);
   const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({
     page: 0,
     pageSize: 25,
   });
+  const [sortModel, setSortModel] = useState<GridSortModel>([]);
   const [filterLogic, setFilterLogic] = useState<'and' | 'or'>('and');
   const [filters, setFilters] = useState<FilterRequest[]>([]);
   const [filterDraft, setFilterDraft] = useState<FilterRequest>({
@@ -120,11 +133,15 @@ export default function SheetPage() {
   const [hydratedSheetId, setHydratedSheetId] = useState<number | null>(null);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('filters');
   const [fieldSearch, setFieldSearch] = useState('');
+  const [shareTarget, setShareTarget] = useState('');
+  const [shareRole, setShareRole] = useState<'editor' | 'viewer'>('viewer');
+  const [cellConflict, setCellConflict] = useState<CellConflict | null>(null);
   const {
     activeUsers,
     activeUserCount,
     cursorActivity,
     realtimeComments,
+    lastCellUpdate,
     sendSocketMessage,
   } = useSheetSocket(Number.isFinite(sheetId) ? sheetId : undefined);
 
@@ -160,20 +177,21 @@ export default function SheetPage() {
       paginationModel.pageSize,
       filterLogic,
       JSON.stringify(filters),
+      JSON.stringify(sortModel),
     ],
     queryFn: () =>
-      filters.length
-        ? datasetAPI.filter(sheet!.dataset_id, {
-            filters,
-            logic: filterLogic,
-            page: paginationModel.page + 1,
-            page_size: paginationModel.pageSize,
-          })
-        : datasetAPI.getData(
-            sheet!.dataset_id,
-            paginationModel.page + 1,
-            paginationModel.pageSize
-          ),
+      sheetAPI.query(sheet!.id, {
+        filters,
+        logic: filterLogic,
+        sort: sortModel[0]?.field
+          ? {
+              column: sortModel[0].field,
+              direction: sortModel[0].sort === 'desc' ? 'desc' : 'asc',
+            }
+          : null,
+        page: paginationModel.page + 1,
+        page_size: paginationModel.pageSize,
+      }),
     enabled: Boolean(sheet?.dataset_id),
   });
 
@@ -189,7 +207,16 @@ export default function SheetPage() {
     enabled: Number.isFinite(sheetId),
   });
 
+  const { data: shares = [] } = useQuery({
+    queryKey: ['shares', sheetId],
+    queryFn: () => sheetAPI.listShares(sheetId),
+    enabled: Number.isFinite(sheetId) && sheet?.access_role === 'owner',
+  });
+
   const rows = buildDatasetGridRows(datasetData?.data);
+  const currentRole = sheet?.access_role || 'viewer';
+  const canEdit = currentRole === 'owner' || currentRole === 'editor';
+  const canManageShares = currentRole === 'owner';
   const commentAnchors = useMemo(
     () =>
       new Set(
@@ -211,6 +238,7 @@ export default function SheetPage() {
 
     return baseColumns.map((column) => ({
       ...column,
+      editable: canEdit,
       renderCell: (params) => {
         const sourceIndex = params.row.__source_index ?? params.row.__row_id;
         const hasComment = commentAnchors.has(`${sourceIndex}:${params.field}`);
@@ -235,7 +263,7 @@ export default function SheetPage() {
         );
       },
     }));
-  }, [commentAnchors, dataset?.schema?.columns, datasetData?.data]);
+  }, [canEdit, commentAnchors, dataset?.schema?.columns, datasetData?.data]);
   const schemaColumns = dataset?.schema?.columns || [];
   const numericColumns = schemaColumns.filter(
     (column) => column.semantic_type === 'numeric'
@@ -255,7 +283,7 @@ export default function SheetPage() {
 
   const aggregateMutation = useMutation({
     mutationFn: (request: AggregateRequest) =>
-      datasetAPI.aggregate(sheet!.dataset_id, request),
+      sheetAPI.aggregate(sheet!.id, request),
     onSuccess: (result) => {
       setAggregateResult(result);
     },
@@ -271,6 +299,7 @@ export default function SheetPage() {
           filters,
           filterLogic,
           pageSize: paginationModel.pageSize,
+          sortModel,
           chartDraft,
         },
       }),
@@ -297,16 +326,8 @@ export default function SheetPage() {
   const createCommentMutation = useMutation({
     mutationFn: (comment: { text: string; row_index?: number; column?: string }) =>
       sheetAPI.createComment(sheetId, comment),
-    onSuccess: (comment) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['comments', sheetId] });
-      sendSocketMessage({
-        type: 'comment',
-        id: comment.id,
-        text: comment.text,
-        row_index: comment.row_index,
-        column: comment.column,
-        timestamp: comment.created_at,
-      });
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.detail || 'Could not save comment');
@@ -318,29 +339,68 @@ export default function SheetPage() {
       rowIndex,
       column,
       value,
+      expectedVersion,
+      force,
     }: {
       rowIndex: number;
       column: string;
       value: unknown;
-    }) => datasetAPI.updateCell(sheet!.dataset_id, {
+      expectedVersion?: number;
+      force?: boolean;
+    }) => sheetAPI.updateCell(sheet!.id, {
       row_index: rowIndex,
       column,
       value,
+      expected_version: expectedVersion,
+      force,
     }),
-    onSuccess: (_result, variables) => {
+    onSuccess: () => {
       toast.success('Cell saved');
+      setCellConflict(null);
       queryClient.invalidateQueries({ queryKey: ['sheet-data'] });
       queryClient.invalidateQueries({ queryKey: ['dataset', sheet?.dataset_id] });
-      sendSocketMessage({
-        type: 'cell_update',
-        row: variables.rowIndex,
-        column: variables.column,
-        value: variables.value,
-        timestamp: new Date().toISOString(),
-      });
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Could not save cell');
+      const detail = error.response?.data?.detail;
+      if (error.response?.status === 409 && detail) {
+        setCellConflict({
+          rowIndex: detail.row_index,
+          column: detail.column,
+          currentValue: detail.current_value,
+          currentVersion: detail.current_version,
+          attemptedValue: detail.attempted_value,
+        });
+        toast.error('Cell changed elsewhere');
+        return;
+      }
+      toast.error(detail || 'Could not save cell');
+    },
+  });
+
+  const createShareMutation = useMutation({
+    mutationFn: () =>
+      sheetAPI.createShare(sheetId, {
+        username_or_email: shareTarget.trim(),
+        role: shareRole,
+      }),
+    onSuccess: () => {
+      toast.success('Access updated');
+      setShareTarget('');
+      queryClient.invalidateQueries({ queryKey: ['shares', sheetId] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.detail || 'Could not update access');
+    },
+  });
+
+  const deleteShareMutation = useMutation({
+    mutationFn: (share: SheetShare) => sheetAPI.deleteShare(sheetId, share.id),
+    onSuccess: () => {
+      toast.success('Access removed');
+      queryClient.invalidateQueries({ queryKey: ['shares', sheetId] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.detail || 'Could not remove access');
     },
   });
 
@@ -386,6 +446,9 @@ export default function SheetPage() {
         pageSize: config.pageSize || current.pageSize,
       }));
     }
+    if (config?.sortModel) {
+      setSortModel(config.sortModel);
+    }
     if (config?.chartDraft) {
       setChartDraft((current) => ({
         ...current,
@@ -401,6 +464,18 @@ export default function SheetPage() {
     setHydratedSheetId(sheet.id);
   }, [hydratedSheetId, sheet]);
 
+  useEffect(() => {
+    if (!lastCellUpdate || !sheet?.dataset_id) {
+      return;
+    }
+    const updateMessage = formatCommittedCellUpdateToast(lastCellUpdate, currentUser?.id);
+    if (updateMessage) {
+      toast(updateMessage);
+    }
+    queryClient.invalidateQueries({ queryKey: ['sheet-data'] });
+    queryClient.invalidateQueries({ queryKey: ['dataset', sheet.dataset_id] });
+  }, [currentUser?.id, lastCellUpdate, queryClient, sheet?.dataset_id]);
+
   const processRowUpdate = async (
     newRow: GridRowModel<DatasetGridRow>,
     oldRow: GridRowModel<DatasetGridRow>
@@ -409,7 +484,7 @@ export default function SheetPage() {
       (key) => !key.startsWith('__') && newRow[key] !== oldRow[key]
     );
 
-    if (!changedColumn || !sheet) {
+    if (!changedColumn || !sheet || !canEdit) {
       return oldRow;
     }
 
@@ -417,16 +492,31 @@ export default function SheetPage() {
       newRow.__source_index ??
         paginationModel.page * paginationModel.pageSize + newRow.__row_id
     );
+    const nextValue = newRow[changedColumn];
+    if (typeof nextValue === 'string' && nextValue.trim().startsWith('=')) {
+      const preview = await sheetAPI.previewFormula(sheet.id, {
+        row_index: sourceIndex,
+        column: changedColumn,
+        value: nextValue,
+      });
+      if (!preview.valid) {
+        throw new Error(preview.error || 'Invalid formula');
+      }
+    }
     await updateCellMutation.mutateAsync({
       rowIndex: sourceIndex,
       column: changedColumn,
-      value: newRow[changedColumn],
+      value: nextValue,
+      expectedVersion: oldRow.__cell_versions?.[changedColumn],
     });
 
     return newRow;
   };
 
   const sendComment = () => {
+    if (!canEdit) {
+      return;
+    }
     const text = commentDraft.trim();
     if (!text) {
       return;
@@ -477,11 +567,16 @@ export default function SheetPage() {
       ...aggregateDraft,
       column,
       group_by: aggregateDraft.group_by?.length ? aggregateDraft.group_by : undefined,
+      filters,
+      logic: filterLogic,
     });
     setAggregateDraft((current) => ({ ...current, column }));
   };
 
   const saveChart = () => {
+    if (!canEdit) {
+      return;
+    }
     const xField = chartDraft.config.x_axis || schemaColumns[0]?.name;
     const yField = chartDraft.config.y_axis || numericColumns[0]?.name;
     if (!sheet || !xField || !yField) {
@@ -491,14 +586,58 @@ export default function SheetPage() {
     createChartMutation.mutate({
       ...chartDraft,
       sheet_id: sheet.id,
-      config: {
-        ...chartDraft.config,
-        x_axis: String(xField),
-        y_axis: String(yField),
-        labels: String(xField),
-        values: String(yField),
-      },
-    });
+        config: {
+          ...chartDraft.config,
+          x_axis: String(xField),
+          y_axis: String(yField),
+          labels: String(xField),
+          values: String(yField),
+          query: {
+            filters,
+            logic: filterLogic,
+            sort: sortModel[0]?.field
+              ? {
+                  column: sortModel[0].field,
+                  direction: sortModel[0].sort === 'desc' ? 'desc' : 'asc',
+                }
+              : null,
+            page_size: 1000,
+          },
+        },
+      });
+  };
+
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportSheet = async (format: 'csv' | 'xlsx' | 'pdf') => {
+    if (!sheet) {
+      return;
+    }
+    try {
+      const blob = await sheetAPI.export(sheet.id, {
+        format,
+        filters,
+        logic: filterLogic,
+        sort: sortModel[0]?.field
+          ? {
+              column: sortModel[0].field,
+              direction: sortModel[0].sort === 'desc' ? 'desc' : 'asc',
+            }
+          : null,
+        include_comments: true,
+        include_charts: true,
+      });
+      downloadBlob(blob, `${sheet.name || 'sheet'}-export.${format}`);
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || 'Export failed');
+    }
   };
 
   const previewChart: SavedChart | null = sheet
@@ -587,11 +726,49 @@ export default function SheetPage() {
               rowCountLabel={`${(dataset?.row_count || 0).toLocaleString()} rows`}
               saving={saveViewMutation.isPending}
               canExport={rows.length > 0}
+              canEdit={canEdit}
               onSave={() => saveViewMutation.mutate()}
-              onExport={() =>
-                downloadCsv(rows, `${sheet?.name || 'sheet'}-current-page.csv`)
-              }
+              onExport={() => exportSheet('csv')}
+              onExportXlsx={() => exportSheet('xlsx')}
+              onExportPdf={() => exportSheet('pdf')}
             />
+
+            {cellConflict && (
+              <Alert
+                severity="warning"
+                action={
+                  <Stack direction="row" spacing={1}>
+                    <Button
+                      size="small"
+                      onClick={() => {
+                        setCellConflict(null);
+                        queryClient.invalidateQueries({ queryKey: ['sheet-data'] });
+                      }}
+                    >
+                      Reload Current
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      onClick={() => {
+                        updateCellMutation.mutate({
+                          rowIndex: cellConflict.rowIndex,
+                          column: cellConflict.column,
+                          value: cellConflict.attemptedValue,
+                          expectedVersion: cellConflict.currentVersion,
+                          force: true,
+                        });
+                      }}
+                    >
+                      Overwrite
+                    </Button>
+                  </Stack>
+                }
+              >
+                {cellConflict.column} row {cellConflict.rowIndex + 1} changed to{' '}
+                {String(cellConflict.currentValue ?? '')}.
+              </Alert>
+            )}
 
             <Box
               sx={{
@@ -608,7 +785,12 @@ export default function SheetPage() {
                 rowCount={datasetData?.total_rows || 0}
                 loading={isDataLoading}
                 paginationModel={paginationModel}
+                sortModel={sortModel}
                 onPaginationModelChange={setPaginationModel}
+                onSortModelChange={(model) => {
+                  setSortModel(model);
+                  setPaginationModel((current) => ({ ...current, page: 0 }));
+                }}
                 processRowUpdate={processRowUpdate}
                 onProcessRowUpdateError={(error) => {
                   toast.error(error instanceof Error ? error.message : 'Cell update failed');
@@ -660,6 +842,7 @@ export default function SheetPage() {
                   <Tab value="fields" label="Fields" />
                   <Tab value="comments" label="Comments" />
                   <Tab value="charts" label="Charts" />
+                  <Tab value="access" label="Access" />
                 </Tabs>
 
                 <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto', p: 2 }}>
@@ -988,7 +1171,7 @@ export default function SheetPage() {
                       <Button
                         variant="outlined"
                         startIcon={<Send />}
-                        disabled={!commentDraft.trim() || createCommentMutation.isPending}
+                        disabled={!canEdit || !commentDraft.trim() || createCommentMutation.isPending}
                         onClick={sendComment}
                       >
                         {createCommentMutation.isPending ? 'Sending...' : 'Send'}
@@ -1116,7 +1299,7 @@ export default function SheetPage() {
                         variant="contained"
                         startIcon={<Save />}
                         onClick={saveChart}
-                        disabled={!numericColumns.length || createChartMutation.isPending}
+                        disabled={!canEdit || !numericColumns.length || createChartMutation.isPending}
                       >
                         {createChartMutation.isPending ? 'Saving...' : 'Save Chart'}
                       </Button>
@@ -1147,7 +1330,7 @@ export default function SheetPage() {
                         {charts.length ? (
                           <Stack spacing={1.5}>
                             {charts.map((chart) => (
-                              <SavedChartCard key={chart.id} chart={chart} rows={rows} />
+                              <SavedChartCard key={chart.id} chart={chart} fallbackRows={rows} />
                             ))}
                           </Stack>
                         ) : (
@@ -1156,6 +1339,93 @@ export default function SheetPage() {
                           </Typography>
                         )}
                       </Box>
+                    </Stack>
+                  )}
+
+                  {inspectorTab === 'access' && (
+                    <Stack spacing={2}>
+                      <Box>
+                        <Typography variant="subtitle1" fontWeight={700}>
+                          Access
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Current role: {currentRole}
+                        </Typography>
+                      </Box>
+
+                      {canManageShares ? (
+                        <Stack spacing={1}>
+                          <TextField
+                            size="small"
+                            label="Username or email"
+                            value={shareTarget}
+                            onChange={(event) => setShareTarget(event.target.value)}
+                          />
+                          <Stack direction="row" spacing={1}>
+                            <FormControl size="small" sx={{ width: 128 }}>
+                              <InputLabel id="share-role-label">Role</InputLabel>
+                              <Select
+                                labelId="share-role-label"
+                                label="Role"
+                                value={shareRole}
+                                onChange={(event) =>
+                                  setShareRole(event.target.value as 'editor' | 'viewer')
+                                }
+                              >
+                                <MenuItem value="viewer">viewer</MenuItem>
+                                <MenuItem value="editor">editor</MenuItem>
+                              </Select>
+                            </FormControl>
+                            <Button
+                              variant="contained"
+                              disabled={!shareTarget.trim() || createShareMutation.isPending}
+                              onClick={() => createShareMutation.mutate()}
+                            >
+                              Grant
+                            </Button>
+                          </Stack>
+                        </Stack>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary">
+                          Only owners can view and manage collaborator details.
+                        </Typography>
+                      )}
+
+                      <Divider />
+                      {canManageShares && (
+                        <List dense disablePadding>
+                          {shares.map((share) => (
+                            <ListItem
+                              key={`${share.role}-${share.user_id}-${share.id}`}
+                              disableGutters
+                              secondaryAction={
+                                share.role !== 'owner' ? (
+                                  <Button
+                                    size="small"
+                                    color="error"
+                                    disabled={deleteShareMutation.isPending}
+                                    onClick={() => deleteShareMutation.mutate(share)}
+                                  >
+                                    Remove
+                                  </Button>
+                                ) : (
+                                  <Chip size="small" label={share.role} />
+                                )
+                              }
+                            >
+                              <ListItemText
+                                primary={share.username}
+                                secondary={share.email}
+                                primaryTypographyProps={{
+                                  variant: 'body2',
+                                  sx: { fontWeight: 700 },
+                                }}
+                                secondaryTypographyProps={{ variant: 'caption' }}
+                              />
+                            </ListItem>
+                          ))}
+                        </List>
+                      )}
                     </Stack>
                   )}
                 </Box>
