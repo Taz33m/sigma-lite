@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     )
     
     # File Upload
-    MAX_UPLOAD_SIZE: int = 10485760  # 10MB
+    MAX_UPLOAD_SIZE: int = 52428800  # 50MB
     UPLOAD_DIR: str = "./uploads"
     
     # Environment

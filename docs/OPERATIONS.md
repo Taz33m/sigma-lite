@@ -170,21 +170,47 @@ uv run python load/generate_dataset.py --rows 100000 --output /tmp/sigmalite-100
 uv run python load/generate_dataset.py --rows 250000 --output /tmp/sigmalite-250k.csv
 ```
 
+The default `MAX_UPLOAD_SIZE` is 50 MB, which is intended to allow the
+deterministic 250k-row benchmark CSV. Lower it for small private instances or
+raise it only when the host, proxy, and upload storage limits are configured to
+match.
+
 Run the Locust scenario after installing Locust in your local/staging environment:
 
 ```bash
 cd backend
-locust -f load/locustfile.py --host http://127.0.0.1:8000
+uv run locust -f load/locustfile.py \
+  --host http://127.0.0.1:8000 \
+  --headless \
+  -u 10 \
+  -r 2 \
+  -t 5m \
+  --exit-code-on-error 1
 ```
 
 The Locust flow registers, uploads, creates a sheet, then exercises sheet-scoped
 query, filter/sort, aggregate, edit, comment, and export paths.
+Run against a clean staging/local rate-limiter window or wait at least one
+minute after auth-heavy smoke tests, because the public-beta auth limit is
+20 requests per minute per IP.
 
 Run the lightweight local API benchmark:
 
 ```bash
 cd backend
 uv run python load/benchmark_dataset.py --rows 100000
+```
+
+Run the same benchmark against a live self-hosted or staging API:
+
+```bash
+cd backend
+uv run python load/benchmark_dataset.py \
+  --api-url https://api.<domain> \
+  --rows 100000 \
+  --repetitions 5 \
+  --skip-export \
+  --assert-targets
 ```
 
 To turn local/staging page query, filter/sort, and aggregate targets into a

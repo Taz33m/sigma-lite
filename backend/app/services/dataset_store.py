@@ -474,15 +474,32 @@ def _apply_sql_sort(row_query, dataset: Dataset, sort: Optional[Dict[str, str]])
 def query_dataset(db: Session, dataset: Dataset, query: QuerySpec) -> Dict[str, Any]:
     ensure_db_storage(db, dataset)
     row_query = _filtered_row_query(db, dataset, query.filters, query.logic)
-    total_rows = row_query.count()
-    total_pages = (total_rows + query.page_size - 1) // query.page_size
     start_idx = (query.page - 1) * query.page_size
-    rows = (
-        _apply_sql_sort(row_query, dataset, query.sort)
-        .offset(start_idx)
-        .limit(query.page_size)
-        .all()
-    )
+    if query.filters:
+        page_results = (
+            _apply_sql_sort(
+                row_query.with_entities(
+                    DatasetRow,
+                    func.count().over().label("total_rows"),
+                ),
+                dataset,
+                query.sort,
+            )
+            .offset(start_idx)
+            .limit(query.page_size)
+            .all()
+        )
+        rows = [result[0] for result in page_results]
+        total_rows = int(page_results[0][1]) if page_results else row_query.count()
+    else:
+        total_rows = dataset.row_count
+        rows = (
+            _apply_sql_sort(row_query, dataset, query.sort)
+            .offset(start_idx)
+            .limit(query.page_size)
+            .all()
+        )
+    total_pages = (total_rows + query.page_size - 1) // query.page_size
     page_source_indexes = [row.row_index for row in rows]
     page_records = _page_records_with_metadata(db, dataset, page_source_indexes)
     return {
