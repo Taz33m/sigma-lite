@@ -91,6 +91,8 @@ class DatasetCell(Base):
         UniqueConstraint("dataset_id", "row_index", "column_name", name="uq_dataset_cell"),
         Index("ix_dataset_cells_dataset_row", "dataset_id", "row_index"),
         Index("ix_dataset_cells_dataset_column", "dataset_id", "column_name"),
+        Index("ix_dataset_cells_row_id", "row_id"),
+        Index("ix_dataset_cells_column_id", "column_id"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -116,6 +118,9 @@ class Sheet(Base):
     """Sheet model for saved workspaces."""
     
     __tablename__ = "sheets"
+    __table_args__ = (
+        Index("ix_sheets_dataset_id", "dataset_id"),
+    )
     
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
@@ -138,6 +143,9 @@ class Chart(Base):
     """Chart model for visualizations."""
     
     __tablename__ = "charts"
+    __table_args__ = (
+        Index("ix_charts_sheet_id", "sheet_id"),
+    )
     
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
@@ -157,6 +165,9 @@ class Comment(Base):
     """Comment model for sheet collaboration."""
 
     __tablename__ = "comments"
+    __table_args__ = (
+        Index("ix_comments_sheet_id", "sheet_id"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     sheet_id = Column(Integer, ForeignKey("sheets.id"), nullable=False)

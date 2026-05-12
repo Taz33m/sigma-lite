@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import re
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, TypeVar
 
 import numpy as np
 import pandas as pd
@@ -47,6 +47,20 @@ class QuerySpec:
     sort: Optional[Dict[str, str]] = None
     page: int = 1
     page_size: int = 100
+
+
+T = TypeVar("T")
+
+
+def _chunks(items: Iterable[T], size: int) -> Iterator[List[T]]:
+    chunk: List[T] = []
+    for item in items:
+        chunk.append(item)
+        if len(chunk) >= size:
+            yield chunk
+            chunk = []
+    if chunk:
+        yield chunk
 
 
 def _json_safe(value: Any) -> Any:
@@ -99,45 +113,24 @@ def ingest_dataframe(
     db.add_all(columns)
     db.flush()
 
-    rows: List[DatasetRow] = [
-        DatasetRow(
-            dataset_id=dataset.id,
-            row_index=int(index),
-            values_json={
-                str(column_name): _json_safe(row[column_name])
-                for column_name in df.columns
-            },
-        )
-        for index, row in df.iterrows()
-    ]
-    db.add_all(rows)
-    db.flush()
+    column_names = [str(column_name) for column_name in df.columns]
 
-    cells: List[DatasetCell] = []
-    column_by_name = {column.name: column for column in columns}
-    row_by_index = {row.row_index: row for row in rows}
-    for row_index, row in df.iterrows():
-        row_ref = row_by_index[int(row_index)]
-        for column_name in df.columns:
-            column_ref = column_by_name[str(column_name)]
-            cells.append(
-                DatasetCell(
-                    dataset_id=dataset.id,
-                    row_id=row_ref.id,
-                    column_id=column_ref.id,
-                    row_index=int(row_index),
-                    column_name=str(column_name),
-                    value=_json_safe(row[column_name]),
-                    version=1,
-                    updated_by_id=user_id,
-                )
-            )
-        if len(cells) >= 5000:
-            db.add_all(cells)
-            db.flush()
-            cells = []
-    if cells:
-        db.add_all(cells)
+    def row_mappings() -> Iterator[Dict[str, Any]]:
+        for row_tuple in df.itertuples(index=True, name=None):
+            source_index = int(row_tuple[0])
+            values: Sequence[Any] = row_tuple[1:]
+            yield {
+                "dataset_id": dataset.id,
+                "row_index": source_index,
+                "values_json": {
+                    column_name: _json_safe(value)
+                    for column_name, value in zip(column_names, values)
+                },
+            }
+
+    for row_chunk in _chunks(row_mappings(), 5000):
+        db.bulk_insert_mappings(DatasetRow, row_chunk)
+        db.flush()
 
     dataset.row_count = len(df)
     dataset.column_count = len(df.columns)
@@ -179,10 +172,25 @@ def dataset_records(
         .order_by(DatasetColumn.position.asc())
         .all()
     )
+    requested_indexes = (
+        None if row_indexes is None else list(dict.fromkeys(row_indexes))
+    )
+    if requested_indexes == []:
+        return []
+
     row_query = db.query(DatasetRow).filter(DatasetRow.dataset_id == dataset.id)
+    rows: List[DatasetRow]
     if row_indexes is not None:
-        row_query = row_query.filter(DatasetRow.row_index.in_(row_indexes))
-    rows = row_query.order_by(DatasetRow.row_index.asc()).all()
+        rows = []
+        for index_chunk in _chunks(requested_indexes or [], 500):
+            rows.extend(
+                row_query.filter(DatasetRow.row_index.in_(index_chunk))
+                .order_by(DatasetRow.row_index.asc())
+                .all()
+            )
+        rows.sort(key=lambda row: row.row_index)
+    else:
+        rows = row_query.order_by(DatasetRow.row_index.asc()).all()
     records: Dict[int, Dict[str, Any]] = {
         row.row_index: {column.name: None for column in columns}
         | (row.values_json or {})
@@ -192,13 +200,27 @@ def dataset_records(
     if not include_cell_metadata:
         return [records[row.row_index] for row in rows]
 
-    cells = (
-        db.query(DatasetCell)
-        .filter(DatasetCell.dataset_id == dataset.id)
-    )
-    if row_indexes is not None:
-        cells = cells.filter(DatasetCell.row_index.in_(row_indexes))
-    for cell in cells.order_by(DatasetCell.row_index.asc(), DatasetCell.column_name.asc()).all():
+    for record in records.values():
+        record["__cell_versions"] = {column.name: 1 for column in columns}
+
+    cell_rows: List[DatasetCell] = []
+    cell_query = db.query(DatasetCell).filter(DatasetCell.dataset_id == dataset.id)
+    if requested_indexes is not None:
+        for index_chunk in _chunks(requested_indexes, 500):
+            cell_rows.extend(
+                cell_query.filter(DatasetCell.row_index.in_(index_chunk))
+                .order_by(DatasetCell.row_index.asc(), DatasetCell.column_name.asc())
+                .all()
+            )
+        cell_rows.sort(key=lambda cell: (cell.row_index, cell.column_name))
+    else:
+        cell_rows = (
+            cell_query
+            .order_by(DatasetCell.row_index.asc(), DatasetCell.column_name.asc())
+            .all()
+        )
+
+    for cell in cell_rows:
         record = records.setdefault(
             cell.row_index,
             {"__source_index": cell.row_index},
@@ -559,6 +581,25 @@ def update_cell(
     force: bool = False,
 ) -> Dict[str, Any]:
     ensure_db_storage(db, dataset)
+    row_ref = (
+        db.query(DatasetRow)
+        .filter(
+            DatasetRow.dataset_id == dataset.id,
+            DatasetRow.row_index == row_index,
+        )
+        .first()
+    )
+    column_ref = (
+        db.query(DatasetColumn)
+        .filter(
+            DatasetColumn.dataset_id == dataset.id,
+            DatasetColumn.name == column,
+        )
+        .first()
+    )
+    if not row_ref or not column_ref:
+        raise ValueError(f"Cell '{column}' row {row_index} not found")
+
     cell = (
         db.query(DatasetCell)
         .filter(
@@ -568,10 +609,14 @@ def update_cell(
         )
         .first()
     )
-    if not cell:
-        raise ValueError(f"Cell '{column}' row {row_index} not found")
-    if expected_version is not None and not force and cell.version != expected_version:
-        raise CellConflictError(row_index, column, cell.value, cell.version, value)
+    current_version = cell.version if cell else 1
+    current_value = (
+        cell.value
+        if cell
+        else (row_ref.values_json or {}).get(column)
+    )
+    if expected_version is not None and not force and current_version != expected_version:
+        raise CellConflictError(row_index, column, current_value, current_version, value)
 
     records = _records_for_dataframe(db, dataset)
     df = dataframe_from_records(records)
@@ -585,7 +630,7 @@ def update_cell(
             row_index,
             column,
             formula,
-            skip_cell_id=cell.id,
+            skip_cell_id=cell.id if cell else None,
         )
     stored_value = (
         DataProcessor.evaluate_formula(
@@ -598,13 +643,27 @@ def update_cell(
         else value
     )
 
+    if not cell:
+        cell = DatasetCell(
+            dataset_id=dataset.id,
+            row_ref=row_ref,
+            column_ref=column_ref,
+            row_index=row_index,
+            column_name=column,
+            value=current_value,
+            version=1,
+            updated_by_id=user_id,
+        )
+        db.add(cell)
+        db.flush()
+
     cell.value = _json_safe(stored_value)
     cell.formula = formula
     cell.version = (cell.version or 0) + 1
     cell.updated_by_id = user_id
-    row_values = dict(cell.row_ref.values_json or {})
+    row_values = dict(row_ref.values_json or {})
     row_values[column] = cell.value
-    cell.row_ref.values_json = row_values
+    row_ref.values_json = row_values
     db.flush()
 
     recalculate_formulas(db, dataset, skip_cell_id=cell.id)

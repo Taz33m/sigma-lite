@@ -1,5 +1,16 @@
 from app.core.rate_limit import check_query_rate_limit
 from app.main import app
+from app.models.dataset import (
+    Chart,
+    Comment,
+    Dataset,
+    DatasetCell,
+    DatasetColumn,
+    DatasetRow,
+    Sheet,
+    SheetShare,
+    WebSocketTicket,
+)
 
 
 def _dataset_route_dependencies(path, method):
@@ -452,4 +463,108 @@ def test_delete_dataset(client, auth_headers, uploaded_dataset):
         event["action"] == "dataset.deleted"
         and event["metadata"]["name"] == uploaded_dataset["name"]
         for event in audit.json()
+    )
+
+
+def test_delete_dataset_removes_db_storage_and_sheet_children(
+    client,
+    auth_headers,
+    created_sheet,
+    db_session,
+):
+    dataset_id = created_sheet["dataset_id"]
+    sheet_id = created_sheet["id"]
+
+    ticket = client.post(f"/api/sheets/{sheet_id}/ws-ticket", headers=auth_headers)
+    assert ticket.status_code == 200, ticket.text
+    comment = client.post(
+        f"/api/sheets/{sheet_id}/comments",
+        headers=auth_headers,
+        json={"text": "needs cleanup", "row_index": 0, "column": "age"},
+    )
+    assert comment.status_code == 201, comment.text
+    chart = client.post(
+        "/api/charts",
+        headers=auth_headers,
+        json={
+            "name": "cleanup chart",
+            "chart_type": "bar",
+            "sheet_id": sheet_id,
+            "config": {"x_axis": "city", "y_axis": "age"},
+        },
+    )
+    assert chart.status_code == 201, chart.text
+    cell = client.patch(
+        f"/api/sheets/{sheet_id}/cell",
+        headers=auth_headers,
+        json={
+            "row_index": 0,
+            "column": "age",
+            "value": 31,
+            "expected_version": 1,
+        },
+    )
+    assert cell.status_code == 200, cell.text
+
+    assert db_session.query(Dataset).filter(Dataset.id == dataset_id).count() == 1
+    assert (
+        db_session.query(DatasetRow)
+        .filter(DatasetRow.dataset_id == dataset_id)
+        .count()
+        > 0
+    )
+    assert (
+        db_session.query(DatasetColumn)
+        .filter(DatasetColumn.dataset_id == dataset_id)
+        .count()
+        > 0
+    )
+    assert (
+        db_session.query(DatasetCell)
+        .filter(DatasetCell.dataset_id == dataset_id)
+        .count()
+        == 1
+    )
+    assert db_session.query(Sheet).filter(Sheet.id == sheet_id).count() == 1
+    assert db_session.query(Comment).filter(Comment.sheet_id == sheet_id).count() == 1
+    assert db_session.query(Chart).filter(Chart.sheet_id == sheet_id).count() == 1
+    assert (
+        db_session.query(WebSocketTicket)
+        .filter(WebSocketTicket.sheet_id == sheet_id)
+        .count()
+        == 1
+    )
+
+    response = client.delete(f"/api/datasets/{dataset_id}", headers=auth_headers)
+    assert response.status_code == 204, response.text
+    db_session.expire_all()
+
+    assert db_session.query(Dataset).filter(Dataset.id == dataset_id).count() == 0
+    assert (
+        db_session.query(DatasetRow)
+        .filter(DatasetRow.dataset_id == dataset_id)
+        .count()
+        == 0
+    )
+    assert (
+        db_session.query(DatasetColumn)
+        .filter(DatasetColumn.dataset_id == dataset_id)
+        .count()
+        == 0
+    )
+    assert (
+        db_session.query(DatasetCell)
+        .filter(DatasetCell.dataset_id == dataset_id)
+        .count()
+        == 0
+    )
+    assert db_session.query(Sheet).filter(Sheet.id == sheet_id).count() == 0
+    assert db_session.query(SheetShare).filter(SheetShare.sheet_id == sheet_id).count() == 0
+    assert db_session.query(Comment).filter(Comment.sheet_id == sheet_id).count() == 0
+    assert db_session.query(Chart).filter(Chart.sheet_id == sheet_id).count() == 0
+    assert (
+        db_session.query(WebSocketTicket)
+        .filter(WebSocketTicket.sheet_id == sheet_id)
+        .count()
+        == 0
     )

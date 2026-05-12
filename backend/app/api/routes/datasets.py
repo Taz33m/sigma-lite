@@ -18,9 +18,15 @@ from app.core.rate_limit import (
 from app.api.deps import get_current_user
 from app.models.user import User
 from app.models.dataset import (
+    Chart as ChartModel,
+    Comment as CommentModel,
     Dataset as DatasetModel,
+    DatasetCell as DatasetCellModel,
+    DatasetColumn as DatasetColumnModel,
+    DatasetRow as DatasetRowModel,
     Sheet as SheetModel,
     SheetShare as SheetShareModel,
+    WebSocketTicket as WebSocketTicketModel,
 )
 from app.schemas.dataset import (
     Dataset, DatasetCreate, DatasetUpdate, DatasetData,
@@ -68,6 +74,45 @@ def _get_accessible_dataset(
         if shared_sheet:
             return dataset
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found")
+
+
+def _delete_dataset_tree(db: Session, dataset_id: int) -> None:
+    sheet_ids = [
+        row[0]
+        for row in db.query(SheetModel.id)
+        .filter(SheetModel.dataset_id == dataset_id)
+        .all()
+    ]
+
+    if sheet_ids:
+        db.query(WebSocketTicketModel).filter(
+            WebSocketTicketModel.sheet_id.in_(sheet_ids)
+        ).delete(synchronize_session=False)
+        db.query(CommentModel).filter(
+            CommentModel.sheet_id.in_(sheet_ids)
+        ).delete(synchronize_session=False)
+        db.query(ChartModel).filter(
+            ChartModel.sheet_id.in_(sheet_ids)
+        ).delete(synchronize_session=False)
+        db.query(SheetShareModel).filter(
+            SheetShareModel.sheet_id.in_(sheet_ids)
+        ).delete(synchronize_session=False)
+        db.query(SheetModel).filter(
+            SheetModel.id.in_(sheet_ids)
+        ).delete(synchronize_session=False)
+
+    db.query(DatasetCellModel).filter(
+        DatasetCellModel.dataset_id == dataset_id
+    ).delete(synchronize_session=False)
+    db.query(DatasetRowModel).filter(
+        DatasetRowModel.dataset_id == dataset_id
+    ).delete(synchronize_session=False)
+    db.query(DatasetColumnModel).filter(
+        DatasetColumnModel.dataset_id == dataset_id
+    ).delete(synchronize_session=False)
+    db.query(DatasetModel).filter(
+        DatasetModel.id == dataset_id
+    ).delete(synchronize_session=False)
 
 
 @router.post(
@@ -476,8 +521,7 @@ def delete_dataset(
         request,
     )
 
-    # Delete database record
-    db.delete(dataset)
+    _delete_dataset_tree(db, dataset_id)
     db.commit()
     
     return None

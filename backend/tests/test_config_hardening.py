@@ -105,6 +105,21 @@ def test_production_requires_redis_rate_limit_backend(tmp_path):
         )
 
 
+def test_selfhosted_uses_public_environment_guardrails(tmp_path):
+    settings = Settings(
+        DATABASE_URL="sqlite:///selfhosted.db",
+        SECRET_KEY="x" * 48,
+        ENVIRONMENT="selfhosted",
+        ALLOWED_ORIGINS="https://sigmalite.example.com",
+        RATE_LIMIT_BACKEND="redis",
+        UPLOAD_DIR=str(tmp_path),
+    )
+
+    assert settings.is_public_environment() is True
+    assert settings.api_docs_enabled() is False
+    assert settings.public_metrics_enabled() is False
+
+
 def test_default_local_cors_includes_loopback_hosts(tmp_path):
     settings = Settings(
         DATABASE_URL="sqlite:///dev.db",

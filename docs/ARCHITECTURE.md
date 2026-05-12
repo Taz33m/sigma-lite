@@ -104,9 +104,10 @@ current value/version so the frontend can reload or explicitly overwrite.
 - REST endpoints are scoped to authenticated owners or explicit sheet shares.
 - Dataset row/query/aggregate endpoints are owner-scoped compatibility surfaces;
   collaborative workspace reads go through sheet-scoped routes.
-- `DISABLE_AUTH` is local-only and rejected in staging/production mode.
-- Staging/production mode rejects weak secrets, wildcard CORS, and non-Redis
-  rate limiting.
+- `DISABLE_AUTH` is local-only and rejected in `selfhosted`, staging, and
+  production modes.
+- `selfhosted`, staging, and production modes reject weak secrets, wildcard
+  CORS, and non-Redis rate limiting.
 - Uploads are limited by size and CSV extension.
 - CSV export neutralizes formula-like values.
 - Redis-backed sliding-window rate limiting is used when configured, with
@@ -114,14 +115,14 @@ current value/version so the frontend can reload or explicitly overwrite.
 
 ## Operational Notes
 
-For production, use:
+For self-hosted/public instances, use:
 
 - PostgreSQL instead of local SQLite.
 - Durable upload storage.
 - HTTPS.
-- Cloudflare-proxied API domain with WAF/rate limiting.
+- API-edge protection such as Cloudflare WAF/rate limiting when internet-facing.
 - Regular database and upload backups.
 - `alembic upgrade head` as a release step.
 
-See [`OPERATIONS.md`](OPERATIONS.md) for monitoring, backup/restore, Cloudflare,
-and load-test runbooks.
+See [`OPERATIONS.md`](OPERATIONS.md) for monitoring, backup/restore,
+API-edge, and load-test runbooks.
