@@ -21,7 +21,7 @@ email-validator==2.1.1
 
 # Data processing
 pandas==2.1.4
-numpy==1.26.3
+numpy==2.4.4
 
 # Caching
 redis==5.0.1
